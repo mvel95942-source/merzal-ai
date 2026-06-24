@@ -11,6 +11,8 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { FeedbackModal } from './FeedbackModal'
 import { ShareSheet } from './ShareSheet'
 import type { ShareTarget } from './ShareSheet'
+import { Markdown } from './Markdown'
+import { stripThoughts } from '../lib/format'
 import { Logo } from './Logo'
 
 interface Props {
@@ -265,7 +267,7 @@ function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
   // ── Assistant message: full-width, no branding, action row ────────
   return (
     <div className="msg" style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 14.5, lineHeight: 1.62, color: 'var(--ink-soft)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+      <Markdown text={stripThoughts(m.content)} />
       <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 8 }}>
         <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} title="Good response" onClick={() => (m.reaction === 'up' ? onReact('up') : onFeedback('up'))}>👍</button>
         <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}>👎</button>
@@ -306,7 +308,8 @@ function Composer(p: {
   const docRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const camRef = useRef<HTMLInputElement>(null)
-  const pick = (r: React.RefObject<HTMLInputElement | null>) => r.current?.click()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const pick = (r: React.RefObject<HTMLInputElement | null>) => { r.current?.click(); setMenuOpen(false) }
   const onInput = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.length) p.onFiles(e.target.files); e.target.value = '' }
 
   return (
@@ -332,9 +335,19 @@ function Composer(p: {
           <input ref={docRef} type="file" multiple accept={ACCEPT_DOCS} onChange={onInput} style={{ display: 'none' }} />
           <input ref={imgRef} type="file" multiple accept={ACCEPT_IMAGES} onChange={onInput} style={{ display: 'none' }} />
           <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onInput} style={{ display: 'none' }} />
-          <button title="Attach file" onClick={() => pick(docRef)} style={iconBtn}>📎</button>
-          <button title="Upload image" onClick={() => pick(imgRef)} style={iconBtn}>🖼️</button>
-          <button title="Camera" onClick={() => pick(camRef)} style={iconBtn}>📷</button>
+          <div style={{ position: 'relative', flex: 'none' }}>
+            <button title="Add" aria-label="Add" onClick={() => setMenuOpen((v) => !v)} style={{ ...iconBtn, fontSize: 22, color: 'var(--muted)', transform: menuOpen ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }}>＋</button>
+            {menuOpen && (
+              <>
+                <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                <div style={{ position: 'absolute', bottom: 46, left: 0, zIndex: 31, background: '#fff', border: '1px solid var(--line)', borderRadius: 12, boxShadow: '0 12px 30px -8px #0003', padding: 5, width: 210 }}>
+                  <AddItem icon="🖼️" label="Upload photo" onClick={() => pick(imgRef)} />
+                  <AddItem icon="📄" label="Upload file" onClick={() => pick(docRef)} />
+                  <AddItem icon="📷" label="Take photo" onClick={() => pick(camRef)} />
+                </div>
+              </>
+            )}
+          </div>
           <textarea
             value={p.input}
             onChange={(e) => p.setInput(e.target.value)}
@@ -356,6 +369,14 @@ function Composer(p: {
 }
 
 const iconBtn: React.CSSProperties = { width: 36, height: 36, flex: 'none', border: 'none', background: 'transparent', borderRadius: 9, fontSize: 17, cursor: 'pointer', display: 'grid', placeItems: 'center' }
+
+function AddItem({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{ width: '100%', height: 40, border: 'none', borderRadius: 9, background: 'transparent', display: 'flex', alignItems: 'center', gap: 11, padding: '0 11px', fontSize: 13.5, color: 'var(--ink-soft)', textAlign: 'left', cursor: 'pointer' }}>
+      <span style={{ fontSize: 17 }}>{icon}</span>{label}
+    </button>
+  )
+}
 
 function ModeToggle({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) => void }) {
   return (

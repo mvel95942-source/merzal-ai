@@ -1,11 +1,12 @@
 // Conversation export — plain text download and print-to-PDF (no libs).
 import type { Message } from './types'
+import { stripThoughts } from './format'
 
 function toPlainText(title: string, messages: Message[]): string {
   const lines = [title, '='.repeat(title.length), '']
   for (const m of messages) {
     lines.push(`${m.role === 'user' ? 'You' : 'Assistant'}:`)
-    lines.push(m.content, '')
+    lines.push(m.role === 'assistant' ? stripThoughts(m.content) : m.content, '')
   }
   return lines.join('\n')
 }
@@ -28,7 +29,7 @@ export function exportPdf(title: string, messages: Message[]) {
   const rows = messages.map((m) => `
     <div class="row ${m.role}">
       <div class="who">${m.role === 'user' ? 'You' : 'Assistant'}</div>
-      <div class="bubble">${esc(m.content).replace(/\n/g, '<br>')}</div>
+      <div class="bubble">${esc(m.role === 'assistant' ? stripThoughts(m.content) : m.content).replace(/\n/g, '<br>')}</div>
     </div>`).join('')
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
     <style>

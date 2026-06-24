@@ -12,7 +12,6 @@ import { SharedView } from './components/SharedView'
 import { ShareSheet } from './components/ShareSheet'
 import type { ShareTarget } from './components/ShareSheet'
 import { exportPdf, exportText } from './lib/export'
-import { ConnectionPill } from './components/ConnectionPill'
 import { useConnection } from './hooks/useConnection'
 import { useIsMobile } from './hooks/useIsMobile'
 
@@ -142,7 +141,6 @@ export default function App() {
               {profile?.department ?? 'Campus'}{profile?.semester ? ` · Sem ${profile.semester}` : ''}
             </span>
           </div>
-          <ConnectionPill state={conn} queued={queued} />
         </header>
 
         <ChatViewGate activeId={activeId} ensureActive={ensureActive} conn={conn} setQueued={setQueued} onFirstMessage={onFirstMessage} />
@@ -158,6 +156,17 @@ export default function App() {
       )}
 
       {shareItem && <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />}
+      {conn === 'offline' && <OfflineToast queued={queued} />}
+    </div>
+  )
+}
+
+// Shown only when the network drops — replaces the always-on Live/Slow pill.
+function OfflineToast({ queued }: { queued: number }) {
+  return (
+    <div style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 9, background: '#2a2520', color: '#f0ead8', padding: '9px 16px', borderRadius: 999, fontSize: 13, boxShadow: '0 8px 24px #0003', animation: 'mz-rise .3s both' }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger, #d9694a)' }} />
+      You’re offline{queued > 0 ? ` — ${queued} message${queued > 1 ? 's' : ''} queued` : ' — messages will send when you reconnect'}
     </div>
   )
 }

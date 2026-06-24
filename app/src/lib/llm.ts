@@ -4,6 +4,7 @@
 // from the browser. Falls back to a built-in stub so the chat UX always works.
 import { supabase, hasSupabase } from './supabase'
 import { isDemo } from './demo'
+import { stripThoughts } from './format'
 import type { ChatMode, Message } from './types'
 
 // Preview mode: call the Gemini/Gemma OpenAI-compatible endpoint directly from
@@ -105,36 +106,13 @@ function makeThoughtStripper(emit: (t: string) => void) {
   }
 }
 
-// Final cleanup of a complete response. Normally Gemma puts the answer AFTER
-// </thought>; occasionally it buries it inside the thought with no trailing
-// text — in that case, recover the final-answer line instead of dumping raw.
-function stripThoughtsAll(raw: string): string {
-  let s = raw
-    .replace(/<thought>[\s\S]*?<\/thought>/g, '') // closed blocks
-    .replace(/<thought>[\s\S]*$/g, '')            // unclosed trailing block
-    .replace(/<\/?thought>/g, '')
-    .replace(/^\s+/, '')
-    .trim()
-  if (s) return s
-  // Answer was inside the thought — pull the last sentence-like line.
-  const inner = raw.replace(/<\/?thought>/g, '')
-  const lines = inner.split('\n')
-    .map((l) => l.trim().replace(/^[*\-•]\s*/, '').replace(/^["“]|["”]$/g, '').trim())
-    .filter(Boolean)
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i]
-    if (/[.!?]$/.test(l) && l.length > 12 && !/^(user|task|goal|request|constraint|input|output|step|reasoning|analysis)\b[:.]?/i.test(l)) return l
-  }
-  return lines[lines.length - 1] || raw.trim()
-}
-
 async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Promise<string> {
   const reader = res.body!.getReader()
   const dec = new TextDecoder()
   const stripper = makeThoughtStripper(onToken)
   let buf = ''
   let raw = ''
-  const finish = () => { stripper.flush(); return stripThoughtsAll(raw) }
+  const finish = () => { stripper.flush(); return stripThoughts(raw) }
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break

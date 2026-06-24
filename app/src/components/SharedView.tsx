@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import type { SharedConversation } from '../lib/api'
+import { Markdown } from './Markdown'
+import { stripThoughts } from '../lib/format'
 import { Logo } from './Logo'
 
 // Public, read-only conversation viewer reached via #/share/<token>.
@@ -28,7 +30,7 @@ export function SharedView({ token }: { token: string }) {
                     <div style={{ maxWidth: '80%', background: '#fff', border: '1px solid var(--line-strong)', borderRadius: '16px 16px 4px 16px', padding: '11px 15px', fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{m.content}</div>
                   </div>
                 ) : (
-                  <div key={m.id} style={{ fontSize: 14.5, lineHeight: 1.62, color: 'var(--ink-soft)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                  <div key={m.id}><Markdown text={stripThoughts(m.content)} /></div>
                 ),
               )}
             </div>
