@@ -45,6 +45,11 @@ button { cursor: pointer; }
 @keyframes mz-fadein { 0% { opacity: 0; transform: translateY(8px) } 100% { opacity: 1; transform: none } }
 @keyframes mz-rise { 0% { opacity: 0; transform: translateY(14px) } 100% { opacity: 1; transform: none } }
 @keyframes mz-spin { to { transform: rotate(360deg) } }
+/* Mobile-first: collapse the login split to the form only on phones. */
+@media (max-width: 760px) {
+  .hero-pane { display: none !important; }
+}
+
 @keyframes tag-stream {
   0% { opacity: 0; filter: blur(6px); transform: translateY(4px) }
   14% { opacity: 1; filter: blur(0); transform: none }

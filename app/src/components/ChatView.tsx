@@ -4,6 +4,8 @@ import { api } from '../lib/api'
 import { aiProvider } from '../lib/ai'
 import { knowledgeFor } from '../lib/knowledge'
 import { SESSION_TURN_LIMIT, extractMemories, memoryContext } from '../lib/memory'
+import { ACCEPT_DOCS, ACCEPT_IMAGES, readFiles } from '../lib/attachments'
+import type { PendingAttachment } from '../lib/attachments'
 import type { ChatMode, ConnState, Message } from '../lib/types'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { FeedbackModal } from './FeedbackModal'
@@ -30,6 +32,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [thinking, setThinking] = useState(false)
   const [draft, setDraft] = useState('') // streamed-but-not-saved assistant text
   const [feedbackFor, setFeedbackFor] = useState<{ m: Message; type: 'up' | 'down' } | null>(null)
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -58,20 +61,21 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conn])
 
-  async function runSend(text: string, m: ChatMode, fromQueue = false) {
+  async function runSend(text: string, m: ChatMode, fromQueue = false, atts: PendingAttachment[] = []) {
     if (!chatId) return
-    const userMsg = await api.addMessage({ chat_id: chatId, role: 'user', content: text, mode: m })
+    const ready = atts.filter((a) => a.status === 'ready')
+    const marker = atts.length ? atts.map((a) => `📎 ${a.name}`).join('   ') + '\n' : ''
+    const userMsg = await api.addMessage({ chat_id: chatId, role: 'user', content: marker + text, mode: m })
     const history = [...messages, userMsg]
     setMessages(history)
-    if (messages.length === 0 && !fromQueue) onFirstMessage(chatId, text.slice(0, 48))
-    // Smart persistent-memory extraction (fire-and-forget).
+    if (messages.length === 0 && !fromQueue) onFirstMessage(chatId, (text || atts[0]?.name || 'New chat').slice(0, 48))
     extractMemories(text).catch(() => {})
-    await generate(history, m)
+    await generate(history, m, ready)
   }
 
   // Stream an assistant reply grounded in memory + retrieved knowledge, then
   // persist it. `history` is the full turn list ending with the user message.
-  async function generate(history: Message[], m: ChatMode) {
+  async function generate(history: Message[], m: ChatMode, atts: PendingAttachment[] = []) {
     if (!chatId) return
     setThinking(true)
     setDraft('')
@@ -86,6 +90,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
         {
           mode: m,
           context,
+          attachments: atts.map((a) => ({ kind: a.kind, name: a.name, mime: a.mime, dataUrl: a.dataUrl, text: a.text })),
           messages: history.slice(-SESSION_TURN_LIMIT).map((x) => ({ role: x.role, content: x.content })),
           signal: ctrl.signal,
         },
@@ -125,8 +130,10 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
 
   function send() {
     const text = input.trim()
-    if (!text || !chatId || streaming || thinking) return
+    if ((!text && !attachments.length) || !chatId || streaming || thinking) return
+    const atts = attachments
     setInput('')
+    setAttachments([])
     if (conn === 'offline') {
       const q = [...readQueue(), { chatId, text, mode }]
       writeQueue(q)
@@ -135,7 +142,12 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
       setMessages((prev) => [...prev, { id: 'q' + Date.now(), chat_id: chatId, role: 'user', content: text, mode, created_at: new Date().toISOString() }])
       return
     }
-    runSend(text, mode)
+    runSend(text, mode, false, atts)
+  }
+
+  async function addFiles(files: FileList | File[]) {
+    const read = await readFiles(files)
+    setAttachments((prev) => [...prev, ...read])
   }
 
   function stop() {
@@ -150,7 +162,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
         {empty ? (
           <Hero onPick={(q) => { setInput(q); setTimeout(send, 0) }} disabled={!chatId} />
         ) : (
-          <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 22 }}>
             {messages.map((m) => (
               <MessageRow
                 key={m.id}
@@ -166,7 +178,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           </div>
         )}
       </div>
-      <Composer mode={mode} setMode={setMode} input={input} setInput={setInput} onSend={send} streaming={streaming || thinking} onStop={stop} conn={conn} />
+      <Composer mode={mode} setMode={setMode} input={input} setInput={setInput} onSend={send} streaming={streaming || thinking} onStop={stop} conn={conn} attachments={attachments} onFiles={addFiles} onRemoveAttachment={(id) => setAttachments((p) => p.filter((a) => a.id !== id))} />
       {feedbackFor && (
         <FeedbackModal
           type={feedbackFor.type}
@@ -285,19 +297,50 @@ function WordReveal({ text }: { text: string }) {
   )
 }
 
-function Composer(p: { mode: ChatMode; setMode: (m: ChatMode) => void; input: string; setInput: (s: string) => void; onSend: () => void; streaming: boolean; onStop: () => void; conn: ConnState }) {
+function Composer(p: {
+  mode: ChatMode; setMode: (m: ChatMode) => void; input: string; setInput: (s: string) => void
+  onSend: () => void; streaming: boolean; onStop: () => void; conn: ConnState
+  attachments: PendingAttachment[]; onFiles: (f: FileList | File[]) => void; onRemoveAttachment: (id: string) => void
+}) {
+  const docRef = useRef<HTMLInputElement>(null)
+  const imgRef = useRef<HTMLInputElement>(null)
+  const camRef = useRef<HTMLInputElement>(null)
+  const pick = (r: React.RefObject<HTMLInputElement | null>) => r.current?.click()
+  const onInput = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.length) p.onFiles(e.target.files); e.target.value = '' }
+
   return (
-    <div style={{ borderTop: '1px solid var(--line)', background: 'var(--paper-panel)', padding: '14px 0 18px' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
+    <div style={{ borderTop: '1px solid var(--line)', background: 'var(--paper-panel)', padding: '12px 0 14px', paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 16px' }}>
         <ModeToggle mode={p.mode} setMode={p.setMode} />
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, border: '1px solid var(--line-strong)', borderRadius: 16, background: '#fff', padding: '8px 8px 8px 16px' }}>
+
+        {p.attachments.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '4px 0 10px' }}>
+            {p.attachments.map((a) => (
+              <div key={a.id} title={a.note ?? a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line-strong)', borderRadius: 10, padding: '6px 8px', background: a.status === 'unsupported' ? '#fbeee6' : '#fff', maxWidth: 220 }}>
+                {a.kind === 'image' && a.dataUrl
+                  ? <img src={a.dataUrl} alt={a.name} style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover' }} />
+                  : <span style={{ fontSize: 18 }}>{a.status === 'unsupported' ? '⚠️' : '📄'}</span>}
+                <span style={{ fontSize: 12, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                <button onClick={() => p.onRemoveAttachment(a.id)} style={{ border: 'none', background: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, border: '1px solid var(--line-strong)', borderRadius: 16, background: '#fff', padding: '6px 6px 6px 8px' }}>
+          <input ref={docRef} type="file" multiple accept={ACCEPT_DOCS} onChange={onInput} style={{ display: 'none' }} />
+          <input ref={imgRef} type="file" multiple accept={ACCEPT_IMAGES} onChange={onInput} style={{ display: 'none' }} />
+          <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onInput} style={{ display: 'none' }} />
+          <button title="Attach file" onClick={() => pick(docRef)} style={iconBtn}>📎</button>
+          <button title="Upload image" onClick={() => pick(imgRef)} style={iconBtn}>🖼️</button>
+          <button title="Camera" onClick={() => pick(camRef)} style={iconBtn}>📷</button>
           <textarea
             value={p.input}
             onChange={(e) => p.setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); p.onSend() } }}
             placeholder={p.conn === 'offline' ? brand.inputPlaceholderOffline : brand.inputPlaceholder}
             rows={1}
-            style={{ flex: 1, border: 'none', outline: 'none', resize: 'none', fontSize: 15, lineHeight: 1.5, maxHeight: 160, background: 'transparent', color: 'var(--ink)', padding: '6px 0' }}
+            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', resize: 'none', fontSize: 16, lineHeight: 1.5, maxHeight: 160, background: 'transparent', color: 'var(--ink)', padding: '7px 2px' }}
           />
           {p.streaming ? (
             <button onClick={p.onStop} style={btn('#1d1a16')}>■</button>
@@ -305,11 +348,13 @@ function Composer(p: { mode: ChatMode; setMode: (m: ChatMode) => void; input: st
             <button onClick={p.onSend} style={btn('var(--accent)')}>↑</button>
           )}
         </div>
-        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--faint)', margin: '10px 0 0' }}>{brand.disclaimer}</p>
+        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--faint)', margin: '8px 0 0' }}>{brand.disclaimer}</p>
       </div>
     </div>
   )
 }
+
+const iconBtn: React.CSSProperties = { width: 36, height: 36, flex: 'none', border: 'none', background: 'transparent', borderRadius: 9, fontSize: 17, cursor: 'pointer', display: 'grid', placeItems: 'center' }
 
 function ModeToggle({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) => void }) {
   return (

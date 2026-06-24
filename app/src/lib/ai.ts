@@ -2,7 +2,10 @@
 // chat UI. Today: Gemini (via the gateway/llm transport). Tomorrow: add another
 // AIProvider and point `aiProvider` at it.
 import { streamChat } from './llm'
+import type { Attachment } from './llm'
 import type { ChatMode } from './types'
+
+export type { Attachment } from './llm'
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -14,6 +17,8 @@ export interface AIStreamOptions {
   messages: ChatTurn[]
   /** Retrieved knowledge + memory, injected as system context. */
   context?: string
+  /** Files/images attached to the latest user turn. */
+  attachments?: Attachment[]
   signal?: AbortSignal
 }
 
@@ -28,7 +33,7 @@ export interface AIProvider {
 export const GeminiProvider: AIProvider = {
   id: 'gemini',
   streamResponse(opts, onToken) {
-    return streamChat({ mode: opts.mode, messages: opts.messages, context: opts.context, signal: opts.signal }, onToken)
+    return streamChat({ mode: opts.mode, messages: opts.messages, context: opts.context, attachments: opts.attachments, signal: opts.signal }, onToken)
   },
 }
 

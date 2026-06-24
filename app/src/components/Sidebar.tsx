@@ -48,7 +48,7 @@ export function Sidebar(p: Props) {
   }
 
   return (
-    <aside style={{ width: 264, flex: 'none', background: 'var(--paper-app)', borderRight: '1px solid #e6e0d2', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <aside style={{ width: '100%', height: '100%', background: 'var(--paper-app)', borderRight: '1px solid #e6e0d2', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '18px 12px 14px 15px', display: 'flex', alignItems: 'center', gap: 11 }}>
         <Logo size={32} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.1, flex: 1, minWidth: 0 }}>

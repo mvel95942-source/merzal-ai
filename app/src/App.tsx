@@ -10,6 +10,7 @@ import { ChatView } from './components/ChatView'
 import { Settings } from './components/Settings'
 import { ConnectionPill } from './components/ConnectionPill'
 import { useConnection } from './hooks/useConnection'
+import { useIsMobile } from './hooks/useIsMobile'
 
 type Phase = 'loading' | 'login' | 'setup' | 'app'
 
@@ -21,7 +22,9 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [queued, setQueued] = useState(0)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const conn = useConnection()
+  const isMobile = useIsMobile()
 
   const loadAfterAuth = useCallback(async () => {
     const session = await api.getSession()
@@ -67,25 +70,43 @@ export default function App() {
   if (phase === 'login') return <Login />
   if (phase === 'setup') return <Setup onDone={loadAfterAuth} />
 
+  const closeDrawer = () => setDrawerOpen(false)
+  const sidebar = (
+    <Sidebar
+      chats={chats}
+      activeId={activeId}
+      account={account}
+      onSelect={(id) => { setActiveId(id); closeDrawer() }}
+      onNew={() => { newChat(); closeDrawer() }}
+      onRename={(id, t) => { api.renameChat(id, t); setChats((p) => p.map((c) => (c.id === id ? { ...c, title: t } : c))) }}
+      onPin={(id, pinned) => { api.pinChat(id, pinned); setChats((p) => p.map((c) => (c.id === id ? { ...c, pinned } : c))) }}
+      onDelete={(id) => { api.deleteChat(id); setChats((p) => p.filter((c) => c.id !== id)); if (activeId === id) setActiveId(null) }}
+      onSettings={() => { setShowSettings(true); closeDrawer() }}
+    />
+  )
+
   return (
-    <div style={{ height: '100vh', display: 'flex', overflow: 'hidden', background: 'var(--paper-app)' }}>
-      <Sidebar
-        chats={chats}
-        activeId={activeId}
-        account={account}
-        onSelect={setActiveId}
-        onNew={newChat}
-        onRename={(id, t) => { api.renameChat(id, t); setChats((p) => p.map((c) => (c.id === id ? { ...c, title: t } : c))) }}
-        onPin={(id, pinned) => { api.pinChat(id, pinned); setChats((p) => p.map((c) => (c.id === id ? { ...c, pinned } : c))) }}
-        onDelete={(id) => { api.deleteChat(id); setChats((p) => p.filter((c) => c.id !== id)); if (activeId === id) setActiveId(null) }}
-        onSettings={() => setShowSettings(true)}
-      />
+    <div style={{ height: '100dvh', display: 'flex', overflow: 'hidden', background: 'var(--paper-app)' }}>
+      {/* Sidebar: fixed column on desktop, slide-in drawer on mobile */}
+      {isMobile ? (
+        <>
+          {drawerOpen && <div onClick={closeDrawer} style={{ position: 'fixed', inset: 0, background: '#1d1a1655', zIndex: 40 }} />}
+          <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, width: 'min(82vw, 320px)', zIndex: 41, transform: drawerOpen ? 'translateX(0)' : 'translateX(-104%)', transition: 'transform .24s ease', boxShadow: drawerOpen ? '4px 0 24px #0002' : 'none' }}>
+            {sidebar}
+          </div>
+        </>
+      ) : <div style={{ width: 264, flex: 'none' }}>{sidebar}</div>}
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <header style={{ height: 56, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', borderBottom: '1px solid var(--line)', background: '#f6f3ecdd', backdropFilter: 'blur(6px)' }}>
-          <span className="mono" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>
-            {profile?.department ?? 'Campus'}{profile?.semester ? ` · Sem ${profile.semester}` : ''}
-          </span>
+        <header style={{ height: 54, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 14px', borderBottom: '1px solid var(--line)', background: '#f6f3ecdd', backdropFilter: 'blur(6px)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {isMobile && (
+              <button onClick={() => setDrawerOpen(true)} aria-label="Menu" style={{ width: 36, height: 36, flex: 'none', border: '1px solid var(--line-strong)', borderRadius: 9, background: '#fff', fontSize: 16, display: 'grid', placeItems: 'center' }}>☰</button>
+            )}
+            <span className="mono" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile?.department ?? 'Campus'}{profile?.semester ? ` · Sem ${profile.semester}` : ''}
+            </span>
+          </div>
           <ConnectionPill state={conn} queued={queued} />
         </header>
 
