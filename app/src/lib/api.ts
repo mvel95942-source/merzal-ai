@@ -144,6 +144,17 @@ const realApi = {
     await supabase.from('messages').update({ reaction }).eq('id', messageId)
   },
 
+  async deleteMessage(messageId: string) {
+    await supabase.from('messages').delete().eq('id', messageId)
+  },
+
+  // ── FEEDBACK ──────────────────────────────────────────────────────
+  async submitFeedback(f: { chat_id: string; message_id: string; type: 'up' | 'down'; comment?: string }) {
+    const id = await uid()
+    const { error } = await supabase.from('message_feedback').insert({ user_id: id, ...f })
+    if (error) throw error
+  },
+
   // ── MEMORY (user_memory.fact) ─────────────────────────────────────
   async listMemory(): Promise<MemoryItem[]> {
     const { data } = await supabase

@@ -24,6 +24,12 @@ export type Database = {
         Update: { bucket?: string; created_at?: string; id?: string; pinned?: boolean; title?: string | null; updated_at?: string; user_id?: string }
         Relationships: []
       }
+      message_feedback: {
+        Row: { id: string; user_id: string; chat_id: string; message_id: string; type: string; comment: string | null; created_at: string }
+        Insert: { id?: string; user_id: string; chat_id: string; message_id: string; type: string; comment?: string | null; created_at?: string }
+        Update: { id?: string; user_id?: string; chat_id?: string; message_id?: string; type?: string; comment?: string | null; created_at?: string }
+        Relationships: []
+      }
       kb_chunks: {
         Row: { college_id: string; content: string; created_at: string; document_id: string; embedding: string | null; id: string; metadata: Json }
         Insert: { college_id?: string; content: string; created_at?: string; document_id: string; embedding?: string | null; id?: string; metadata?: Json }

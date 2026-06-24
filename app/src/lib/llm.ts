@@ -15,17 +15,22 @@ const GEMINI_MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.
 
 async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
   if (!GEMINI_KEY) return stub(req, onToken)
-  const sys =
+  const base =
     req.mode === 'campus'
-      ? "You are a private campus assistant. Be concise, helpful, and accurate."
-      : 'You are Merzal AI, a helpful, concise assistant.'
+      ? 'You are a private campus assistant. Be concise, helpful, and accurate.'
+      : 'You are a helpful, concise assistant.'
+  const sys =
+    base +
+    ' Use the conversation so far to stay consistent and remember what the user told you (their name, what they study, preferences).' +
+    (req.context ? `\n\n${req.context}` : '')
   const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GEMINI_KEY}` },
     body: JSON.stringify({ model: GEMINI_MODEL, stream: true, messages: [{ role: 'system', content: sys }, ...req.messages] }),
     signal: req.signal,
   })
-  if (!res.ok || !res.body) return stub(req, onToken)
+  if (res.status === 429) return note(req, onToken, 'Gemini is rate-limited right now (free-tier quota). Wait a moment and try again, or use a key with billing enabled.')
+  if (!res.ok || !res.body) return note(req, onToken, `The model returned an error (${res.status}). Check the API key / model in .env.local.`)
   return streamOpenAISSE(res, onToken)
 }
 
@@ -102,6 +107,17 @@ export async function streamChat(req: LLMRequest, onToken: (t: string) => void):
     if (req.signal?.aborted) throw e
     return stub(req, onToken)
   }
+}
+
+// Stream a short notice (used for rate-limit / error fallbacks) word-by-word.
+async function note(req: LLMRequest, onToken: (t: string) => void, msg: string): Promise<string> {
+  let full = ''
+  for (const w of msg.split(/(\s+)/)) {
+    if (req.signal?.aborted) break
+    full += w; onToken(w)
+    await new Promise((r) => setTimeout(r, 12))
+  }
+  return full
 }
 
 // ── Built-in stub (no backend needed) ────────────────────────────────

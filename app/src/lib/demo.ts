@@ -57,6 +57,17 @@ export const demoApi = {
   },
   editMessage: async (id: string, content: string) => mutateMsg(id, (m) => ({ ...m, content })),
   reactMessage: async (id: string, reaction: Reaction) => mutateMsg(id, (m) => ({ ...m, reaction })),
+  deleteMessage: async (id: string) => {
+    for (const k of Object.keys(localStorage)) {
+      if (!k.startsWith('merzal_demo_msgs_')) continue
+      const list = read<Message[]>(k, [])
+      if (list.some((m) => m.id === id)) write(k, list.filter((m) => m.id !== id))
+    }
+  },
+  submitFeedback: async (f: { chat_id: string; message_id: string; type: 'up' | 'down'; comment?: string }) => {
+    const key = 'merzal_demo_feedback'
+    write(key, [{ id: uuid(), created_at: now(), ...f }, ...read<unknown[]>(key, [])])
+  },
 
   listMemory: async (): Promise<MemoryItem[]> => read<MemoryItem[]>(MEMORY, []),
   addMemory: async (fact: string): Promise<MemoryItem> => {

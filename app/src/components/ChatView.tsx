@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
-import { streamChat } from '../lib/llm'
+import { aiProvider } from '../lib/ai'
+import { knowledgeFor } from '../lib/knowledge'
+import { SESSION_TURN_LIMIT, extractMemories, memoryContext } from '../lib/memory'
 import type { ChatMode, ConnState, Message } from '../lib/types'
 import { ThinkingIndicator } from './ThinkingIndicator'
+import { FeedbackModal } from './FeedbackModal'
 import { Logo } from './Logo'
 
 interface Props {
@@ -26,6 +29,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [streaming, setStreaming] = useState(false)
   const [thinking, setThinking] = useState(false)
   const [draft, setDraft] = useState('') // streamed-but-not-saved assistant text
+  const [feedbackFor, setFeedbackFor] = useState<{ m: Message; type: 'up' | 'down' } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -57,20 +61,32 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   async function runSend(text: string, m: ChatMode, fromQueue = false) {
     if (!chatId) return
     const userMsg = await api.addMessage({ chat_id: chatId, role: 'user', content: text, mode: m })
-    setMessages((prev) => [...prev, userMsg])
+    const history = [...messages, userMsg]
+    setMessages(history)
     if (messages.length === 0 && !fromQueue) onFirstMessage(chatId, text.slice(0, 48))
+    // Smart persistent-memory extraction (fire-and-forget).
+    extractMemories(text).catch(() => {})
+    await generate(history, m)
+  }
 
+  // Stream an assistant reply grounded in memory + retrieved knowledge, then
+  // persist it. `history` is the full turn list ending with the user message.
+  async function generate(history: Message[], m: ChatMode) {
+    if (!chatId) return
     setThinking(true)
     setDraft('')
     const ctrl = new AbortController()
     abortRef.current = ctrl
     let started = false
     try {
-      // TODO(RAG): inject retrieved memory + campus knowledge as context.
-      const full = await streamChat(
+      const lastUser = [...history].reverse().find((x) => x.role === 'user')?.content ?? ''
+      const [mem, know] = await Promise.all([memoryContext(), knowledgeFor(m).retrieve(lastUser, m)])
+      const context = [mem, know].filter(Boolean).join('\n\n')
+      const full = await aiProvider.streamResponse(
         {
           mode: m,
-          messages: [...messages, userMsg].map((x) => ({ role: x.role, content: x.content })),
+          context,
+          messages: history.slice(-SESSION_TURN_LIMIT).map((x) => ({ role: x.role, content: x.content })),
           signal: ctrl.signal,
         },
         (tok) => {
@@ -89,6 +105,22 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
       setDraft('')
       abortRef.current = null
     }
+  }
+
+  // ChatGPT-style edit: replace the user message, drop everything after it
+  // (including the old AI reply), and regenerate from the edited state.
+  async function regenerate(userMsg: Message, newText: string) {
+    if (!chatId || streaming || thinking) return
+    const idx = messages.findIndex((x) => x.id === userMsg.id)
+    if (idx === -1) return
+    const after = messages.slice(idx + 1)
+    const edited = { ...userMsg, content: newText }
+    const history = [...messages.slice(0, idx), edited]
+    setMessages(history)
+    await api.editMessage(userMsg.id, newText)
+    for (const x of after) api.deleteMessage(x.id).catch(() => {})
+    extractMemories(newText).catch(() => {})
+    await generate(history, userMsg.mode ?? mode)
   }
 
   function send() {
@@ -118,14 +150,36 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
         {empty ? (
           <Hero onPick={(q) => { setInput(q); setTimeout(send, 0) }} disabled={!chatId} />
         ) : (
-          <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 26 }}>
-            {messages.map((m) => <MessageRow key={m.id} m={m} onReact={(r) => reactTo(m, r)} />)}
+          <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+            {messages.map((m) => (
+              <MessageRow
+                key={m.id}
+                m={m}
+                busy={streaming || thinking}
+                onReact={(r) => reactTo(m, r)}
+                onFeedback={(type) => setFeedbackFor({ m, type })}
+                onEditSubmit={(text) => regenerate(m, text)}
+              />
+            ))}
             {thinking && <AssistantWrap><ThinkingIndicator /></AssistantWrap>}
             {streaming && <AssistantWrap><WordReveal text={draft} /></AssistantWrap>}
           </div>
         )}
       </div>
       <Composer mode={mode} setMode={setMode} input={input} setInput={setInput} onSend={send} streaming={streaming || thinking} onStop={stop} conn={conn} />
+      {feedbackFor && (
+        <FeedbackModal
+          type={feedbackFor.type}
+          onClose={() => setFeedbackFor(null)}
+          onSubmit={async (comment) => {
+            const { m, type } = feedbackFor
+            setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reaction: type } : x)))
+            await api.reactMessage(m.id, type)
+            if (chatId) await api.submitFeedback({ chat_id: chatId, message_id: m.id, type, comment }).catch(() => {})
+            setFeedbackFor(null)
+          }}
+        />
+      )}
     </main>
   )
 
@@ -136,46 +190,88 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   }
 }
 
+// Assistant streaming/thinking wrapper — no name, no avatar: clean convo style.
 function AssistantWrap({ children }: { children: React.ReactNode }) {
   return (
-    <div className="msg" style={{ display: 'flex', gap: 13, animation: 'mz-fadein .3s both' }}>
-      <Logo size={30} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-          <span style={{ fontWeight: 600, fontSize: 13.5 }}>{brand.aiName}</span>
-        </div>
-        {children}
-      </div>
+    <div className="msg" style={{ animation: 'mz-fadein .3s both' }}>
+      <div style={{ minWidth: 0 }}>{children}</div>
     </div>
   )
 }
 
-function MessageRow({ m, onReact }: { m: Message; onReact: (r: 'up' | 'down') => void }) {
-  const time = new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+function MessageRow({ m, busy, onReact, onFeedback, onEditSubmit }: {
+  m: Message
+  busy: boolean
+  onReact: (r: 'up' | 'down') => void
+  onFeedback: (type: 'up' | 'down') => void
+  onEditSubmit: (text: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(m.content)
+
+  // ── User message: right-aligned bubble, Edit + Copy ──────────────
   if (m.role === 'user') {
+    if (editing) {
+      return (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ width: '78%', maxWidth: '78%' }}>
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit() } if (e.key === 'Escape') cancelEdit() }}
+              rows={Math.min(8, draft.split('\n').length + 1)}
+              style={{ width: '100%', border: '1px solid var(--accent)', borderRadius: 14, padding: '11px 14px', fontSize: 14.5, lineHeight: 1.5, resize: 'vertical', outline: 'none', background: '#fff', color: 'var(--ink)' }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 7 }}>
+              <button onClick={cancelEdit} style={miniBtn(false)}>Cancel</button>
+              <button onClick={commitEdit} style={miniBtn(true)}>Send</button>
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{ maxWidth: '78%', background: '#fff', border: '1px solid var(--line-strong)', borderRadius: '16px 16px 4px 16px', padding: '11px 15px', fontSize: 14.5, lineHeight: 1.5, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+      <div className="msg" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ maxWidth: '78%' }}>
+          <div style={{ background: '#fff', border: '1px solid var(--line-strong)', borderRadius: '16px 16px 4px 16px', padding: '11px 15px', fontSize: 14.5, lineHeight: 1.5, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+          <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 6, justifyContent: 'flex-end' }}>
+            <button className="act-btn" disabled={busy} onClick={() => { setDraft(m.content); setEditing(true) }}>Edit</button>
+            <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
+          </div>
+        </div>
       </div>
     )
   }
+
+  // ── Assistant message: full-width, no branding, action row ────────
   return (
-    <div className="msg" style={{ display: 'flex', gap: 13 }}>
-      <Logo size={30} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-          <span style={{ fontWeight: 600, fontSize: 13.5 }}>{brand.aiName}</span>
-          <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{time}</span>
-        </div>
-        <div style={{ fontSize: 14.5, lineHeight: 1.62, color: 'var(--ink-soft)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
-        <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 8 }}>
-          <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} onClick={() => onReact('up')}>▲</button>
-          <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} onClick={() => onReact('down')}>▼</button>
-          <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
-        </div>
+    <div className="msg" style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 14.5, lineHeight: 1.62, color: 'var(--ink-soft)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+      <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 8 }}>
+        <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} title="Good response" onClick={() => (m.reaction === 'up' ? onReact('up') : onFeedback('up'))}>👍</button>
+        <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}>👎</button>
+        <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
+        <button className="act-btn" onClick={() => shareMessage(m.content)}>Share</button>
       </div>
     </div>
   )
+
+  function commitEdit() {
+    const t = draft.trim()
+    setEditing(false)
+    if (t && t !== m.content) onEditSubmit(t)
+  }
+  function cancelEdit() { setEditing(false); setDraft(m.content) }
+}
+
+async function shareMessage(text: string) {
+  if (navigator.share) { try { await navigator.share({ text }); return } catch { /* cancelled */ } }
+  navigator.clipboard?.writeText(text)
+}
+
+function miniBtn(primary: boolean): React.CSSProperties {
+  return { height: 30, padding: '0 14px', borderRadius: 9, fontSize: 12.5, fontWeight: 600, border: primary ? 'none' : '1px solid var(--line-strong)', background: primary ? 'var(--accent)' : '#fff', color: primary ? '#fff' : 'var(--ink)' }
 }
 
 // Word-by-word blur-to-sharp reveal of the streamed text.
