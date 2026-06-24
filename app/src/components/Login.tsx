@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
 import { hasSupabase } from '../lib/supabase'
+import { enterDemo } from '../lib/demo'
 import { Logo } from './Logo'
 
 type Mode = 'email' | 'phone'
@@ -52,6 +53,11 @@ export function Login() {
     }
   }
 
+  function explore() {
+    enterDemo()
+    window.location.reload()
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: '#1d1a16' }}>
       {/* Hero */}
@@ -98,7 +104,11 @@ export function Login() {
               <Divider label="or use your email" />
               <div style={{ display: 'flex', gap: 6, padding: 4, background: '#ece7dd', borderRadius: 11, marginBottom: 18 }}>
                 {(['email', 'phone'] as Mode[]).map((m) => (
-                  <button key={m} onClick={() => setMode(m)} style={tab(mode === m)}>
+                  <button
+                    key={m}
+                    onClick={() => { setMode(m); if (m === 'phone' && !value.trim()) setValue('+91 '); if (m === 'email' && value.startsWith('+91')) setValue('') }}
+                    style={tab(mode === m)}
+                  >
                     {m === 'email' ? 'Email' : 'Phone'}
                   </button>
                 ))}
@@ -108,12 +118,15 @@ export function Login() {
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendCode()}
-                placeholder={mode === 'email' ? 'you@gmail.com' : '+1 555 123 4567'}
+                placeholder={mode === 'email' ? 'you@gmail.com' : '+91 98765 43210'}
+                inputMode={mode === 'phone' ? 'tel' : 'email'}
                 style={field}
               />
               <button onClick={sendCode} disabled={busy} style={primaryBtn}>
                 {busy ? 'Sending…' : 'Send code'} <span className="mono">→</span>
               </button>
+              <Divider label="just looking?" />
+              <button onClick={explore} style={ssoBtn}>Explore the app — preview without sign-in →</button>
             </>
           ) : (
             <>

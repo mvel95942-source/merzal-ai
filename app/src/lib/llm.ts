@@ -4,7 +4,30 @@
 // configured for the chosen provider, falls back to a built-in stub so the chat
 // UX always works.
 import { supabase, hasSupabase } from './supabase'
+import { isDemo } from './demo'
 import type { ChatMode, Message } from './types'
+
+// Preview mode: call Gemini's OpenAI-compatible endpoint directly from the
+// browser (key in VITE_GEMINI_API_KEY). Dev-only — in production the edge
+// function holds keys server-side. Falls back to the stub if no key is set.
+const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
+const GEMINI_MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.0-flash'
+
+async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  if (!GEMINI_KEY) return stub(req, onToken)
+  const sys =
+    req.mode === 'campus'
+      ? "You are a private campus assistant. Be concise, helpful, and accurate."
+      : 'You are Merzal AI, a helpful, concise assistant.'
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GEMINI_KEY}` },
+    body: JSON.stringify({ model: GEMINI_MODEL, stream: true, messages: [{ role: 'system', content: sys }, ...req.messages] }),
+    signal: req.signal,
+  })
+  if (!res.ok || !res.body) return stub(req, onToken)
+  return streamOpenAISSE(res, onToken)
+}
 
 // The client never chooses a model. It sends the mode (campus|world) and the
 // edge function maps that to a provider + model from server-side config, so
@@ -52,6 +75,7 @@ async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Pro
 }
 
 export async function streamChat(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  if (isDemo()) return streamGeminiDirect(req, onToken)
   if (!hasSupabase) return stub(req, onToken)
   try {
     const { data } = await supabase.auth.getSession()

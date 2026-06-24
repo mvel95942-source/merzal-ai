@@ -2,6 +2,7 @@
 // signed-in user. All inserts set user_id because the messages/chats policies
 // require user_id = auth.uid().
 import { supabase } from './supabase'
+import { demoApi, isDemo } from './demo'
 import type { Chat, MemoryItem, Message, Profile, Reaction } from './types'
 
 async function uid(): Promise<string> {
@@ -10,7 +11,7 @@ async function uid(): Promise<string> {
   return data.user.id
 }
 
-export const api = {
+const realApi = {
   // ── AUTH ──────────────────────────────────────────────────────────
   async sendOtp(identifier: string, mode: 'email' | 'phone') {
     const opts = mode === 'phone' ? { phone: identifier } : { email: identifier }
@@ -172,3 +173,12 @@ export const api = {
     await supabase.from('user_memory').delete().eq('user_id', id)
   },
 }
+
+// In preview/demo mode, route data methods to the localStorage store so the app
+// works with no Supabase auth. Auth-only methods (OTP/OAuth) keep the real impl.
+export const api: typeof realApi = new Proxy(realApi, {
+  get(target, prop: string) {
+    if (isDemo() && prop in demoApi) return (demoApi as Record<string, unknown>)[prop]
+    return (target as Record<string, unknown>)[prop]
+  },
+}) as typeof realApi
