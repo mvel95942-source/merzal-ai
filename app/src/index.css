@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --paper: #ece8df;
+  --paper-panel: #f6f3ec;
+  --paper-app: #f3f0e9;
+  --ink: #1d1a16;
+  --ink-soft: #33302a;
+  --muted: #857e72;
+  --faint: #a79f91;
+  --line: #ece5d6;
+  --line-strong: #ddd6c8;
+  --accent: #bf5e36;
+  --accent-soft: #fbf1ec;
+  --danger: #c0563a;
+  --font-display: 'Newsreader', Georgia, serif;
+  --font-body: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--paper);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  color: var(--ink);
+}
+textarea, input, button { font-family: inherit; }
+::placeholder { color: #9b948899; }
+button { cursor: pointer; }
+
+.mono { font-family: var(--font-mono); }
+.display { font-family: var(--font-display); }
+
+.scroll::-webkit-scrollbar { width: 9px; }
+.scroll::-webkit-scrollbar-thumb {
+  background: #cfc8ba; border-radius: 8px;
+  border: 3px solid transparent; background-clip: content-box;
+}
+
+@keyframes mz-shimmer { 0% { background-position: -220px 0 } 100% { background-position: 420px 0 } }
+@keyframes mz-word { 0% { opacity: 0; filter: blur(7px); transform: translateY(3px) } 100% { opacity: 1; filter: blur(0); transform: none } }
+@keyframes mz-pulse { 0%, 100% { opacity: .35; transform: scale(.82) } 50% { opacity: 1; transform: scale(1) } }
+@keyframes mz-fadein { 0% { opacity: 0; transform: translateY(8px) } 100% { opacity: 1; transform: none } }
+@keyframes mz-rise { 0% { opacity: 0; transform: translateY(14px) } 100% { opacity: 1; transform: none } }
+@keyframes mz-spin { to { transform: rotate(360deg) } }
+
+.mz-word { display: inline; animation: mz-word .5s cubic-bezier(.16,1,.3,1) both; }
+.skeleton {
+  background: linear-gradient(90deg, #e9e2d4 25%, #f2ecdf 37%, #e9e2d4 63%);
+  background-size: 420px 100%;
+  animation: mz-shimmer 1.3s infinite linear;
+  border-radius: 6px;
+}
+
+.act-btn {
+  height: 30px; padding: 0 8px; border: none; border-radius: 7px;
+  background: transparent; color: #8a8377; font-size: 12.5px;
+  display: inline-flex; align-items: center; gap: 5px; transition: all .12s;
+}
+.act-btn:hover { background: var(--line); color: var(--ink-soft); }
+.act-btn.on { color: var(--accent); background: var(--accent-soft); }
+
+.row-actions { opacity: 0; transition: opacity .12s; }
+.chat-row:hover .row-actions { opacity: 1; }
+.msg-actions { opacity: 0; transition: opacity .14s; }
+.msg:hover .msg-actions { opacity: 1; }
+@media (hover: none) { .row-actions, .msg-actions { opacity: 1 !important; } }

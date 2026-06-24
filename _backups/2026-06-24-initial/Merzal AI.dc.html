@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<script>
+/* ── MERZAL AI BRAND CONFIG ── swap values here to rebrand ── */
+window.BRAND = {
+  name: 'Merzal AI', shortName: 'Merzal', logoLetter: 'M', accentColor: '#c47a35',
+  loginBadge: 'Campus AI · Secured by MerzalLabs',
+  loginHeroTitle: 'The AI that actually knows your campus.',
+  loginHeroDesc: 'A private assistant built for your institution — running securely on-premises. Your data never leaves. Powered by MerzalLabs.',
+  loginSubtitle: 'Sign in with your Merzal AI account.',
+  loginFeatures: ['On-premises', 'FERPA-ready', 'Private by default'],
+  loginTags: ['Persistent memory', 'Streaming answers', 'Conversation history'],
+  ssoLabel: 'Continue with University SSO',
+  loginFooter: 'Hosted on-premises · Secured by MerzalLabs · FERPA-compliant.',
+  sidebarSub: 'Campus · On-premises', aiName: 'Merzal AI',
+  inputPlaceholder: 'Message Merzal AI…',
+  inputPlaceholderOffline: 'Offline — message will queue…',
+  disclaimer: 'Merzal AI can make mistakes. Private & on-premises · memory on.',
+  emptyDesc: 'Ask about courses, deadlines, financial aid, or campus life — private and on-campus.',
+  departments: ['Computer Science','Electrical Engineering','Mechanical Engineering','Civil Engineering','Business Administration','Arts & Humanities','Natural Sciences','Social Sciences','Law','Medicine & Health Sciences'],
+  semesters: ['Semester 1','Semester 2','Semester 3','Semester 4','Semester 5','Semester 6','Semester 7','Semester 8'],
+  prompts: ['When is the add/drop deadline this term?','How do I apply for financial aid?','Find my advisor\'s office hours','What\'s open on campus right now?'],
+};
+/* See brand.js for full backend API scaffold */
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{background:#ece8df;font-family:'Hanken Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:#1d1a16}
+  textarea{font-family:inherit}
+  ::placeholder{color:#9b948859}
+  @keyframes mz-shimmer{0%{background-position:-220px 0}100%{background-position:420px 0}}
+  @keyframes mz-word{0%{opacity:0;filter:blur(7px);transform:translateY(3px)}100%{opacity:1;filter:blur(0);transform:none}}
+  @keyframes mz-caret{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes mz-pulse{0%,100%{opacity:.35;transform:scale(.82)}50%{opacity:1;transform:scale(1)}}
+  @keyframes mz-fadein{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
+  @keyframes mz-orb{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+  @keyframes mz-rise{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:none}}
+  .mz-scroll::-webkit-scrollbar{width:9px}
+  .mz-scroll::-webkit-scrollbar-thumb{background:#cfc8ba;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+  .mz-chat-row .mz-chat-actions{opacity:0;transition:opacity .12s}
+  .mz-chat-row:hover .mz-chat-actions{opacity:1}
+  .mz-msg .mz-msg-actions{opacity:0;transition:opacity .14s ease;transform:translateY(-2px)}
+  .mz-msg:hover .mz-msg-actions{opacity:1;transform:none}
+  @media (hover:none){.mz-msg .mz-msg-actions{opacity:1;transform:none}.mz-chat-row .mz-chat-actions{opacity:1}}
+  .mz-act-btn{height:30px;padding:0 8px;border:none;border-radius:7px;background:transparent;color:#8a8377;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .12s}
+  .mz-act-btn:hover{background:#ece5d6;color:#33302a}
+  .mz-act-btn.is-on{color:#bf5e36;background:#fbf1ec}
+</style>
+</helmet>
+
+<div style="height:100vh;width:100%;overflow:hidden;background:#ece8df">
+
+  <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+  <div data-screen-label="Login" style="{{ loginWrapStyle }}">
+    
+    <div style="{{ loginHeroStyle }}">
+      <div style="display:flex;align-items:center;gap:13px;animation:mz-logo-in 0.7s cubic-bezier(.34,1.56,.64,1) both">
+        <img src="./logo.svg" style="width:40px;height:40px;flex:none">
+        <div style="display:flex;flex-direction:column;gap:2px;line-height:1">
+          <span style="font-family: Hanken Grotesk; font-size: 25px; font-weight: 500; color: #f0ead8; letter-spacing: .01em">{{ brandName }}</span>
+          <span style="font-family: Arial; font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: #5e5448">{{ brandBadge }}</span>
+        </div>
+      </div>
+      <sc-if value="{{ showHeroText }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:480px;animation:mz-reveal 0.8s 0.18s cubic-bezier(.16,1,.3,1) both">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#c47a35;margin-bottom:22px;opacity:.85">{{ loginTag }}</div>
+        <h1 style="{{ loginH1Style }}">{{ brandHeroTitle }}</h1>
+        <p style="{{ loginPStyle }}">{{ brandHeroDesc }}</p>
+      </div>
+      </sc-if>
+      <sc-if value="{{ showHeroExtras }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;gap:8px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#4a4238;animation:mz-reveal 0.7s 0.38s both">
+        <span>{{ brandFeature0 }}</span><span style="opacity:.3">·</span><span>{{ brandFeature1 }}</span><span style="opacity:.3">·</span><span>{{ brandFeature2 }}</span>
+      </div>
+      <div style="position:absolute;right:-110px;bottom:-110px;width:340px;height:340px;border-radius:50%;border:1.5px solid #3d2f1e;background:radial-gradient(circle,rgba(196,122,53,0.04) 0%,transparent 70%)"></div>
+      <div style="position: absolute; right: -48px; bottom: -48px; width: 210px; height: 210px; border-radius: 50%; border: 1.5px solid #4a3a26; background: radial-gradient(circle,rgba(196,122,53,0.06) 0%,transparent 70%); border-width: 1.5px"></div>
+      <div style="position:absolute;left:62px;top:0;width:1px;height:100%;background:linear-gradient(180deg,transparent 0%,#231a10 40%,#231a10 60%,transparent 100%);opacity:.4"></div>
+      </sc-if>
+    </div><div style="{{ loginFormPaneStyle }}">
+      <div style="width:100%;max-width:368px;animation:mz-form-rise 0.75s 0.12s cubic-bezier(.16,1,.3,1) both">
+        <h2 style="font-family:'Cormorant Garant',serif;font-weight:400;font-size:36px;margin:0 0 5px;letter-spacing:-.015em;color:#1a1612">Welcome back</h2>
+        <p style="font-size:14px;color:#857e72;margin:0 0 28px;font-family:'Figtree',sans-serif">{{ brandLoginSubtitle }}</p>
+
+        <div style="display:flex;gap:6px;padding:4px;background:#ece7dd;border-radius:11px;margin-bottom:18px">
+          <button onClick="{{ setEmailMode }}" style="{{ emailTabStyle }}">Email</button>
+          <button onClick="{{ setPhoneMode }}" style="{{ phoneTabStyle }}">Phone</button>
+        </div>
+
+        <label style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9488;margin-bottom:8px">{{ loginFieldLabel }}</label>
+        <input value="{{ loginValue }}" onInput="{{ onLoginInput }}" placeholder="{{ loginPlaceholder }}" style="width:100%;height:48px;border:1px solid #ddd6c8;border-radius:11px;background:#fff;padding:0 15px;font-size:15px;color:#1d1a16;outline:none;margin-bottom:14px">
+
+        <button onClick="{{ doLogin }}" style="width:100%;height:48px;border:none;border-radius:11px;background:#bf5e36;color:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">Continue <span style="font-family:'JetBrains Mono',monospace">→</span></button>
+
+        <div style="display:flex;align-items:center;gap:12px;margin:22px 0;color:#b3ab9d;font-size:12px"><div style="flex:1;height:1px;background:#e1dacb"></div>or<div style="flex:1;height:1px;background:#e1dacb"></div></div>
+        <button onClick="{{ doLogin }}" style="width:100%;height:46px;border:1px solid #ddd6c8;border-radius:11px;background:#fff;color:#1d1a16;font-size:14px;font-weight:500;cursor:pointer">{{ brandSsoLabel }}</button>
+        <p style="font-size:11px;color:#a59e91;text-align:center;margin:24px 0 0;line-height:1.5">{{ brandLoginFooter }}</p>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Setup" style="min-height:100vh;width:100%;display:flex;align-items:center;justify-content:center;background:#1d1a16;padding:32px;box-sizing:border-box">
+    <div style="width:100%;max-width:420px;background:#f6f3ec;border-radius:20px;padding:36px 32px 32px;box-shadow:0 32px 80px -20px #00000088">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
+        <img src="./logo.svg" style="width:36px;height:36px;flex:none">
+        <div>
+          <div style="font-family:'Cormorant Garant',serif;font-size:20px;font-weight:500;color:#1a1612;line-height:1.1">{{ brandName }}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#a79f91">One-time setup</div>
+        </div>
+      </div>
+
+      <h2 style="font-family:'Cormorant Garant',serif;font-weight:400;font-size:32px;margin:0 0 6px;letter-spacing:-.015em;color:#1a1612">Tell us about yourself</h2>
+      <p style="font-size:14px;color:#857e72;margin:0 0 28px;line-height:1.5">So Merzal can give you the most relevant answers for your department and semester.</p>
+
+      <label style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9488;margin-bottom:8px">Department</label>
+      <select value="{{ setupDept }}" onChange="{{ onSetupDept }}" style="width:100%;height:48px;border:1px solid #ddd6c8;border-radius:11px;background:#fff;padding:0 15px;font-size:15px;color:#1d1a16;outline:none;margin-bottom:18px;cursor:pointer;appearance:none;background-image:url(\" data:image="" svg+xml,%3csvg="" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" %3e%3cpath="" d="M1 1l5 5 5-5" stroke="%23a79f91" stroke-width="1.5" fill="none" stroke-linecap="round" %3e%3c="" svg%3e\");background-repeat:no-repeat;background-position:right="" 14px="" center"="">
+        <sc-for list="{{ setupDepts }}" as="d" hint-placeholder-count="5">
+          <option value="{{ d.val }}">{{ d.label }}</option>
+        </sc-for>
+      </select>
+
+      <label style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9488;margin-bottom:8px">Semester</label>
+      <select value="{{ setupSemester }}" onChange="{{ onSetupSemester }}" style="width:100%;height:48px;border:1px solid #ddd6c8;border-radius:11px;background:#fff;padding:0 15px;font-size:15px;color:#1d1a16;outline:none;margin-bottom:28px;cursor:pointer;appearance:none;background-image:url(\" data:image="" svg+xml,%3csvg="" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" %3e%3cpath="" d="M1 1l5 5 5-5" stroke="%23a79f91" stroke-width="1.5" fill="none" stroke-linecap="round" %3e%3c="" svg%3e\");background-repeat:no-repeat;background-position:right="" 14px="" center"="">
+        <sc-for list="{{ setupSemesters }}" as="s" hint-placeholder-count="4">
+          <option value="{{ s.val }}">{{ s.label }}</option>
+        </sc-for>
+      </select>
+
+      <button onClick="{{ doSetup }}" style="width:100%;height:48px;border:none;border-radius:11px;background:#bf5e36;color:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">Get started <span style="font-family:'JetBrains Mono',monospace">→</span></button>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="App" style="height:100vh;width:100%;display:flex;position:relative;background:#f3f0e9;overflow:hidden">
+
+    <sc-if value="{{ showScrim }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeDrawer }}" style="position:absolute;inset:0;background:#1d1a1655;z-index:30"></div>
+    </sc-if>
+
+    <aside style="{{ sidebarStyle }}">
+      <div style="padding:18px 12px 14px 15px;display:flex;align-items:center;gap:11px">
+        <img src="./logo.svg" style="width:32px;height:32px;flex:none;display:block">
+        <div style="display:flex;flex-direction:column;gap:1px;line-height:1.1;flex:1;min-width:0">
+          <span style="font-family:'Cormorant Garant',serif;font-size:18px;font-weight:500;color:#1a1612">{{ brandName }}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:#a79f91">{{ brandSidebarSub }}</span>
+        </div>
+        <button onClick="{{ toggleSidebar }}" title="Collapse sidebar" style="width:32px;height:32px;border:none;border-radius:7px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;color:#8a8377" style-hover="background:#e4ddce">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9" y1="4" x2="9" y2="20"></line></svg>
+        </button>
+      </div>
+
+      <div style="padding:2px 12px 9px">
+        <button onClick="{{ newChat }}" style="width:100%;height:40px;border:1px solid #e2dccd;border-radius:8px;background:#fff;color:#33302a;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:9px;padding:0 12px;text-align:left" style-hover="background:#f4eee2"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6a6358" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg> New chat</button>
+      </div>
+
+      <div style="padding:0 12px 8px">
+        <div style="display:flex;align-items:center;gap:8px;height:36px;border:1px solid #e6dfd0;border-radius:9px;background:#f4eee2;padding:0 11px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a79f91" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+          <input value="{{ search }}" onInput="{{ onSearch }}" placeholder="Search chats" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:13px;color:#1d1a16">
+        </div>
+      </div>
+
+      <div class="mz-scroll" style="flex:1;overflow-y:auto;padding:2px 8px 8px">
+        <sc-for list="{{ chatGroups }}" as="g" hint-placeholder-count="2">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:#a79f91;padding:11px 8px 5px">{{ g.label }}</div>
+          <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="3">
+            <div class="mz-chat-row" style="{{ c.rowStyle }}">
+              <sc-if value="{{ c.isRenaming }}" hint-placeholder-val="{{ false }}">
+                <input ref="{{ renameInputRef }}" value="{{ renameText }}" onInput="{{ onRenameInput }}" onKeyDown="{{ onRenameKey }}" onBlur="{{ saveRename }}" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:13.5px;color:#1d1a16;padding:0;font-family:inherit"></input>
+              </sc-if>
+              <sc-if value="{{ c.notRenaming }}" hint-placeholder-val="{{ true }}">
+                <span onClick="{{ c.select }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;cursor:pointer">{{ c.title }}</span>
+              </sc-if>
+              <div class="mz-chat-actions" style="display:flex;align-items:center;gap:1px;flex:none">
+                <sc-if value="{{ c.isPinned }}" hint-placeholder-val="{{ false }}">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="#c47a35" style="flex:none;margin-right:2px;opacity:.75"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                </sc-if>
+                <button onClick="{{ c.openMenu }}" title="More options" style="width:22px;height:22px;border:none;border-radius:6px;background:transparent;color:#b3ab9d;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;padding:0" style-hover="background:#e8ddd0;color:#5a544a">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>
+                </button>
+              </div>
+            </div>
+          </sc-for>
+        </sc-for>
+      </div>
+
+      <div style="border-top:1px solid #e6e0d2;padding:9px 11px">
+        <button onClick="{{ openSettings }}" style="width:100%;height:48px;border:none;border-radius:11px;background:transparent;color:#33302a;font-size:13.5px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:0 8px;text-align:left" style-hover="background:#e8e1d3">
+          <span style="width:30px;height:30px;border-radius:50%;background:#bf5e36;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;color:#fff;flex:none">{{ userInitial }}</span>
+          <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0;line-height:1.2">
+            <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ accountName }}</span>
+            <span style="font-size:11px;color:#9b9488;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Memory &amp; settings</span>
+          </span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a79f91" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+      </div>
+      <!-- Context menu backdrop + floating menu -->
+      <sc-if value="{{ showContextMenu }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeContextMenu }}" style="position:fixed;inset:0;z-index:48"></div>
+        <div style="{{ contextMenuStyle }}">
+          <button onClick="{{ ctxShare }}" style="width:100%;height:36px;border:none;border-radius:8px;background:transparent;color:#33302a;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:0 11px;text-align:left" style-hover="background:#f4eee2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>Share
+          </button>
+          <button onClick="{{ ctxStartGroup }}" style="width:100%;height:36px;border:none;border-radius:8px;background:transparent;color:#33302a;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:0 11px;text-align:left" style-hover="background:#f4eee2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Start a group chat
+          </button>
+          <button onClick="{{ ctxRename }}" style="width:100%;height:36px;border:none;border-radius:8px;background:transparent;color:#33302a;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:0 11px;text-align:left" style-hover="background:#f4eee2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Rename
+          </button>
+          <div style="height:1px;background:#ece5d6;margin:3px 8px"></div>
+          <button onClick="{{ ctxPin }}" style="width:100%;height:36px;border:none;border-radius:8px;background:transparent;color:#33302a;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:0 11px;text-align:left" style-hover="background:#f4eee2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>{{ ctxPinLabel }}
+          </button>
+          <div style="height:1px;background:#ece5d6;margin:3px 8px"></div>
+          <button onClick="{{ ctxDelete }}" style="width:100%;height:36px;border:none;border-radius:8px;background:transparent;color:#c0563a;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:0 11px;text-align:left" style-hover="background:#fbf1ec">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4h6v2"></path></svg>Delete
+          </button>
+        </div>
+      </sc-if>
+      <!-- Toast -->
+      <sc-if value="{{ showToast }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;bottom:72px;left:10px;right:10px;z-index:55;pointer-events:none;animation:mz-rise .2s ease both">
+          <div style="background:#1d1a16;color:#f0ead8;font-size:12.5px;padding:9px 14px;border-radius:10px;text-align:center;box-shadow:0 4px 14px -4px #00000044">{{ toastText }}</div>
+        </div>
+      </sc-if>
+    </aside>
+
+    <main style="flex:1;min-width:0;display:flex;flex-direction:column;background:#f6f3ec;position:relative">
+
+      <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ bannerStyle }}">
+          <span style="display:flex;align-items:center;gap:9px"><span style="width:8px;height:8px;border-radius:50%;background:{{ bannerDot }}"></span>{{ bannerText }}</span>
+        </div>
+      </sc-if>
+
+      <header style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #ece5d6;background:#f6f3ecdd;backdrop-filter:blur(6px)">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <button onClick="{{ toggleSidebar }}" title="Toggle sidebar" style="{{ menuBtnStyle }}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#33302a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9" y1="4" x2="9" y2="20"></line></svg>
+          </button>
+          <span style="font-family:'Cormorant Garant',serif;font-size:20px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ activeTitle }}</span>
+        </div>
+
+      </header>
+
+      <div class="mz-scroll" ref="{{ scrollRef }}" style="flex:1;overflow-y:auto">
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="Empty state" style="{{ emptyStyle }}">
+            <h2 style="font-family:'Cormorant Garant',serif;font-weight:300;font-size:44px;margin:0;letter-spacing:-.025em;color:#1a1612;text-align:center">{{ greeting }}</h2>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasMessages }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="Conversation" style="{{ convoStyle }}">
+            <sc-for list="{{ messages }}" as="m" hint-placeholder-count="2">
+              <div class="mz-msg" style="margin-bottom:26px">
+                <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+                    <sc-if value="{{ m.isEditing }}" hint-placeholder-val="{{ false }}">
+                      <div style="width:100%;max-width:80%;border:1px solid #d8cdbb;border-radius:14px;background:#fff;padding:10px 12px;display:flex;flex-direction:column;gap:9px">
+                        <textarea value="{{ editText }}" onInput="{{ onEditInput }}" rows="2" style="width:100%;border:none;outline:none;resize:none;background:transparent;font-size:15px;line-height:1.5;color:#1d1a16"></textarea>
+                        <div style="display:flex;justify-content:flex-end;gap:8px">
+                          <button onClick="{{ cancelEdit }}" style="height:32px;padding:0 14px;border:1px solid #e0d9ca;border-radius:8px;background:#fff;color:#6a6358;font-size:13px;cursor:pointer">Cancel</button>
+                          <button onClick="{{ m.saveEdit }}" style="height:32px;padding:0 14px;border:none;border-radius:8px;background:#1d1a16;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Save &amp; send</button>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.notEditing }}" hint-placeholder-val="{{ true }}">
+                      <div style="max-width:{{ bubbleMaxWidth }};background:#efe7da;border:1px solid #e6ddcd;border-radius:16px 16px 5px 16px;padding:12px 16px;font-size:15.5px;line-height:1.55;color:#211e19;display:flex;flex-direction:column;gap:8px">
+                        <sc-if value="{{ m.hasAttachments }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;flex-wrap:wrap;gap:6px">
+                            <sc-for list="{{ m.attachments }}" as="att" hint-placeholder-count="0">
+                              <sc-if value="{{ att.isImage }}" hint-placeholder-val="{{ false }}">
+                                <div style="width:200px;height:140px;border-radius:8px;background-size:cover;background-position:center;background-image:{{ att.bgImg }}"></div>
+                              </sc-if>
+                              <sc-if value="{{ att.notImage }}" hint-placeholder-val="{{ false }}">
+                                <div style="display:flex;align-items:center;gap:6px;background:#e6dcc8;border-radius:8px;padding:6px 10px;font-size:12px;color:#4a4438">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                  <span>{{ att.name }}</span>
+                                  <span style="color:#8a8377;font-size:11px">{{ att.sizeLabel }}</span>
+                                </div>
+                              </sc-if>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ m.hasContent }}" hint-placeholder-val="{{ true }}">
+                          <span style="white-space:pre-wrap">{{ m.content }}</span>
+                        </sc-if>
+                      </div>
+                      <div class="mz-msg-actions" style="display:flex;gap:1px">
+                        <button onClick="{{ m.copy }}" class="mz-act-btn" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>{{ m.copyLabel }}</button>
+                        <button onClick="{{ m.edit }}" class="mz-act-btn" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Edit</button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.queued }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#c08a3a;border:1px solid #e8d3ad;border-radius:20px;padding:1px 8px">queued · will send when online</span>
+                    </sc-if>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ m.isAssistant }}" hint-placeholder-val="{{ false }}">
+
+                <sc-if value="{{ m.isThinking }}" hint-placeholder-val="{{ false }}">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                      <span style="position:relative;width:20px;height:20px;flex:none">
+                        <span style="position:absolute;inset:0;border-radius:50%;border:2px solid #ecd9cd;border-top-color:#bf5e36;animation:mz-orb .9s linear infinite;display:block"></span>
+                      </span>
+                      <span style="font-size:14px;color:#6a6358">{{ m.phase }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#b3ab9d">{{ m.elapsed }}</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:11px">
+                      <div style="height:11px;border-radius:6px;width:96%;background:linear-gradient(90deg,#ece6da 0%,#f6f2ea 40%,#ece6da 80%);background-size:300px 100%;animation:mz-shimmer 1.4s infinite linear"></div>
+                      <div style="height:11px;border-radius:6px;width:88%;background:linear-gradient(90deg,#ece6da 0%,#f6f2ea 40%,#ece6da 80%);background-size:300px 100%;animation:mz-shimmer 1.4s infinite linear"></div>
+                      <div style="height:11px;border-radius:6px;width:62%;background:linear-gradient(90deg,#ece6da 0%,#f6f2ea 40%,#ece6da 80%);background-size:300px 100%;animation:mz-shimmer 1.4s infinite linear"></div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ m.isText }}" hint-placeholder-val="{{ false }}">
+                  <div onClick="{{ m.toggle }}" style="font-size:15.5px;line-height:1.68;color:#211e19;white-space:pre-wrap">
+                    <sc-for list="{{ m.words }}" as="w" hint-placeholder-count="0"><span style="animation:mz-word .42s ease backwards">{{ w.t }}</span></sc-for>
+                    <sc-if value="{{ m.isStreaming }}" hint-placeholder-val="{{ false }}">
+                      <span style="display:inline-block;width:8px;height:17px;background:#bf5e36;vertical-align:-3px;margin-left:1px;animation:mz-caret 1s steps(1) infinite"></span>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ m.isDone }}" hint-placeholder-val="{{ false }}">
+                    <div class="mz-msg-actions" style="display:flex;gap:1px;margin-top:8px;align-items:center">
+                      <button onClick="{{ m.copy }}" class="mz-act-btn" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>{{ m.copyLabel }}</button>
+                      <button onClick="{{ m.like }}" class="{{ m.likeBtnClass }}" title="Good response"><svg width="14" height="14" viewBox="0 0 24 24" fill="{{ m.likeFill }}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg></button>
+                      <button onClick="{{ m.dislike }}" class="{{ m.dislikeBtnClass }}" title="Bad response"><svg width="14" height="14" viewBox="0 0 24 24" fill="{{ m.dislikeFill }}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path></svg></button>
+                      <button onClick="{{ m.shareMsg }}" class="mz-act-btn" title="Share"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
+                      <button onClick="{{ m.regenerate }}" class="mz-act-btn" title="Regenerate"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
+                      <sc-if value="{{ m.stopped }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#a89f90;margin-left:6px;letter-spacing:.1em;text-transform:uppercase">Stopped</span>
+                      </sc-if>
+                      <sc-if value="{{ m.modeTag }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#a89f90;margin-left:auto;letter-spacing:.08em;text-transform:uppercase">{{ m.modeLabel }}</span>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </sc-if>
+                </sc-if>
+              </div>
+            </sc-for>
+            <div style="height:8px"></div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="{{ composerWrapStyle }}">
+        <div style="max-width:760px;margin:0 auto;border:1px solid #e0d9ca;border-radius:16px;background:#fff;box-shadow:0 4px 18px -12px #6b604a55;display:flex;flex-direction:column;position:relative">
+          <sc-if value="{{ showModeMenu }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ closeModeMenu }}" style="position:fixed;inset:0;z-index:25"></div>
+            <div style="position:absolute;bottom:calc(100% + 8px);right:8px;z-index:26;width:298px;background:#fff;border:1px solid #e6e0d2;border-radius:14px;box-shadow:0 12px 32px -8px #00000030,0 2px 8px -2px #00000018;padding:6px;animation:mz-fadein .15s ease both">
+              <button onClick="{{ pickCampus }}" style="{{ modeCampusBtnStyle }}">
+                <span style="width:32px;height:32px;border-radius:8px;background:{{ modeCampusBg }};display:flex;align-items:center;justify-content:center;color:{{ modeCampusFg }};flex:none">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                </span>
+                <span style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;flex:1;min-width:0">
+                  <span style="font-size:13.5px;font-weight:600;color:#1d1a16;line-height:1.2">Campus</span>
+                  <span style="font-size:11.5px;color:#8a8377;line-height:1.3;text-align:left">Answers from your school's knowledge base.</span>
+                </span>
+                <sc-if value="{{ isCampusMode }}" hint-placeholder-val="{{ true }}">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bf5e36" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </sc-if>
+              </button>
+              <button onClick="{{ pickWorld }}" style="{{ modeWorldBtnStyle }}">
+                <span style="width:32px;height:32px;border-radius:8px;background:{{ modeWorldBg }};display:flex;align-items:center;justify-content:center;color:{{ modeWorldFg }};flex:none">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                </span>
+                <span style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;flex:1;min-width:0">
+                  <span style="font-size:13.5px;font-weight:600;color:#1d1a16;line-height:1.2">World</span>
+                  <span style="font-size:11.5px;color:#8a8377;line-height:1.3;text-align:left">General AI — broad world knowledge.</span>
+                </span>
+                <sc-if value="{{ isWorldMode }}" hint-placeholder-val="{{ false }}">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bf5e36" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </sc-if>
+              </button>
+            </div>
+          </sc-if>
+          <textarea value="{{ input }}" onInput="{{ onInput }}" onKeyDown="{{ onKey }}" placeholder="{{ inputPlaceholder }}" rows="1" style="flex:1;border:none;outline:none;resize:none;background:transparent;font-size:15.5px;line-height:1.5;color:#1d1a16;padding:14px 16px 6px;max-height:160px"></textarea>
+          <sc-if value="{{ hasAttachment }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:4px 12px 0;display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ attachments }}" as="att" hint-placeholder-count="0">
+                <div style="display:flex;align-items:center;gap:6px;background:#f4ede1;border:1px solid #e6dcc8;border-radius:8px;padding:4px 8px 4px 10px;font-size:12.5px;color:#4a4438">
+                  <span>{{ att.name }}</span>
+                  <button onClick="{{ att.remove }}" style="border:none;background:none;cursor:pointer;color:#a89f90;font-size:14px;line-height:1;padding:0" style-hover="color:#bf5e36">×</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px 8px 10px">
+            <div style="display:flex;align-items:center;gap:2px">
+              <button onClick="{{ attachFile }}" title="Attach file" style="width:{{ toolbarBtnSize }};height:{{ toolbarBtnSize }};border:none;border-radius:9px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#8a8377" style-hover="background:#f0e9db;color:#33302a">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+              </button>
+              <button onClick="{{ attachPhoto }}" title="Add photo" style="width:{{ toolbarBtnSize }};height:{{ toolbarBtnSize }};border:none;border-radius:9px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#8a8377" style-hover="background:#f0e9db;color:#33302a">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+              </button>
+              <button onClick="{{ openCamera }}" title="Take photo" style="width:{{ toolbarBtnSize }};height:{{ toolbarBtnSize }};border:none;border-radius:9px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#8a8377" style-hover="background:#f0e9db;color:#33302a">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+              </button>
+              <input ref="{{ fileInputRef }}" type="file" multiple="" style="display:none">
+              <input ref="{{ photoInputRef }}" type="file" accept="image/*" multiple="" style="display:none">
+              <input ref="{{ cameraInputRef }}" type="file" accept="image/*" capture="environment" style="display:none">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onClick="{{ toggleModeMenu }}" title="Switch mode" style="{{ modePillStyle }}">
+                <span style="width:7px;height:7px;border-radius:50%;background:{{ modeDot }};flex:none"></span>
+                <span>{{ modeLabel }}</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <button onClick="{{ sendOrStop }}" title="{{ sendOrStopTitle }}" style="{{ sendStyle }}">
+                <sc-if value="{{ isGenerating }}" hint-placeholder-val="{{ false }}">
+                  <span style="width:11px;height:11px;background:#fff;border-radius:2.5px;display:inline-block"></span>
+                </sc-if>
+                <sc-if value="{{ notGenerating }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;line-height:1">↑</span>
+                </sc-if>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div style="max-width:760px;margin:7px auto 0;text-align:center;font-size:11px;color:#a89f90">{{ brandDisclaimer }}</div>
+      </div>
+    </main>
+
+    <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeSettings }}" style="{{ settingsOverlayStyle }}">
+        <div data-screen-label="Settings / Memory" onClick="{{ stop }}" style="{{ settingsCardStyle }}">
+          <div style="padding:20px 24px;border-bottom:1px solid #e8e1d3;display:flex;align-items:center;justify-content:between;justify-content:space-between">
+            <div>
+              <h3 style="font-family:'Cormorant Garant',serif;font-weight:400;font-size:26px;margin:0;letter-spacing:-.01em">Memory &amp; settings</h3>
+              <p style="font-size:12.5px;color:#8a8377;margin:4px 0 0">What Merzal remembers about you, across every chat.</p>
+            </div>
+            <button onClick="{{ closeSettings }}" style="width:32px;height:32px;border:1px solid #e0d9ca;border-radius:9px;background:#fff;cursor:pointer;font-size:16px;color:#6a6358;flex:none">✕</button>
+          </div>
+          <div class="mz-scroll" style="overflow-y:auto;padding:20px 24px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#a79f91">Remembered ({{ memoryCount }})</span>
+              <button onClick="{{ clearMemory }}" style="border:none;background:none;color:#bf5e36;font-size:12.5px;cursor:pointer;font-weight:600">Clear all</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ memory }}" as="mem" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #ebe4d6;border-radius:11px;padding:13px 14px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#5e7d6e;flex:none"></span>
+                  <span style="flex:1;font-size:14px;color:#33302a;line-height:1.4">{{ mem.text }}</span>
+                  <button onClick="{{ mem.remove }}" style="border:none;background:none;color:#b3ab9d;cursor:pointer;font-size:15px;flex:none">✕</button>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:24px;border-top:1px solid #e8e1d3;padding-top:18px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#a79f91;margin-bottom:12px">Preferences</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+                <span style="font-size:14px;color:#33302a">Persistent memory</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e7d6e;border:1px solid #cfdcd3;border-radius:20px;padding:2px 10px;background:#eef3ef">ON</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+                <span style="font-size:14px;color:#33302a">Signed in as</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8a8377">{{ accountLabel }}</span>
+              </div>
+              <button onClick="{{ logout }}" style="margin-top:14px;width:100%;height:42px;border:1px solid #e6cfc6;border-radius:10px;background:#fbf1ec;color:#bf5e36;font-size:14px;font-weight:600;cursor:pointer">Sign out</button>
+            </div>
+            <div style="margin-top:24px;border-top:1px solid #e8e1d3;padding-top:18px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#a79f91;margin-bottom:14px">Academic profile</div>
+              <label style="display:block;font-size:12px;color:#9b9488;margin-bottom:6px">Department</label>
+              <select value="{{ settingsDept }}" onChange="{{ onSettingsDept }}" style="width:100%;height:44px;border:1px solid #ddd6c8;border-radius:10px;background:#fff;padding:0 14px;font-size:14px;color:#1d1a16;outline:none;margin-bottom:14px;cursor:pointer;appearance:none;background-image:url(\" data:image="" svg+xml,%3csvg="" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" %3e%3cpath="" d="M1 1l5 5 5-5" stroke="%23a79f91" stroke-width="1.5" fill="none" stroke-linecap="round" %3e%3c="" svg%3e\");background-repeat:no-repeat;background-position:right="" 12px="" center"="">
+                <sc-for list="{{ setupDepts }}" as="d" hint-placeholder-count="5">
+                  <option value="{{ d.val }}">{{ d.label }}</option>
+                </sc-for>
+              </select>
+              <label style="display:block;font-size:12px;color:#9b9488;margin-bottom:6px">Semester</label>
+              <select value="{{ settingsSemester }}" onChange="{{ onSettingsSemester }}" style="width:100%;height:44px;border:1px solid #ddd6c8;border-radius:10px;background:#fff;padding:0 14px;font-size:14px;color:#1d1a16;outline:none;margin-bottom:14px;cursor:pointer;appearance:none;background-image:url(\" data:image="" svg+xml,%3csvg="" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" %3e%3cpath="" d="M1 1l5 5 5-5" stroke="%23a79f91" stroke-width="1.5" fill="none" stroke-linecap="round" %3e%3c="" svg%3e\");background-repeat:no-repeat;background-position:right="" 12px="" center"="">
+                <sc-for list="{{ setupSemesters }}" as="s" hint-placeholder-count="4">
+                  <option value="{{ s.val }}">{{ s.label }}</option>
+                </sc-for>
+              </select>
+              <button onClick="{{ saveDeptSemester }}" style="width:100%;height:42px;border:none;border-radius:10px;background:#1d1a16;color:#f6f3ec;font-size:14px;font-weight:600;cursor:pointer">Save changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#d16923&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'login',
+    loginMode: 'email',
+    loginValue: '',
+    account: '',
+    chats: [],
+    activeId: null,
+    input: '',
+    search: '',
+    online: true,
+    slow: false,
+    settingsOpen: false,
+    drawerOpen: false,
+    collapsed: false,
+    isMobile: false,
+    tick: 0,
+    memory: [],
+    loginTagIdx: 0,
+    activeMsgId: null,
+    editingId: null,
+    editText: '',
+    copiedId: null,
+    attachments: [],
+    dept: '',
+    semester: '',
+    setupDept: '',
+    setupSemester: '',
+    contextMenuId: null,
+    contextMenuPos: null,
+    renamingId: null,
+    renameText: '',
+    pinnedIds: [],
+    toast: null,
+    mode: 'campus',
+    showModeMenu: false,
+    reactions: {},
+  };
+
+  KEY = 'merzal_ai_state_v1';
+  timers = {};
+
+  componentDidMount() {
+    this.loadState();
+    this.setState({ isMobile: window.innerWidth < 820 });
+    this._resize = () => this.setState({ isMobile: window.innerWidth < 820 });
+    window.addEventListener('resize', this._resize);
+    this._on = () => this.setState({ online: true });
+    this._off = () => this.setState({ online: false });
+    window.addEventListener('online', this._on);
+    window.addEventListener('offline', this._off);
+    this.timers.tag = setInterval(() => this.setState(s => ({ loginTagIdx: (s.loginTagIdx + 1) % 3 })), 2600);
+    this.timers.clock = setInterval(() => { if (this.isGenerating()) this.setState(s => ({ tick: s.tick + 1 })); }, 250);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this._resize);
+    window.removeEventListener('online', this._on);
+    window.removeEventListener('offline', this._off);
+    Object.values(this.timers).forEach(t => clearInterval(t));
+  }
+
+  isGenerating() {
+    const c = this.activeChat();
+    return c && c.messages.some(m => m.role === 'assistant' && (m.mstate === 'thinking' || m.mstate === 'streaming'));
+  }
+
+  normalizeChats(chats) {
+    if (!Array.isArray(chats)) return chats;
+    return chats.map(c => ({
+      ...c,
+      messages: (c.messages || []).map(m => {
+        if (m.role === 'assistant' && m.mstate !== 'done') {
+          const full = m.full || m.content || '';
+          return { ...m, mstate: 'done', content: full, words: full.split(/(\s+)/).filter(t => t.length).map(t => ({ t })) };
+        }
+        return m;
+      }),
+    }));
+  }
+
+  loadState() {
+    try {
+      const raw = localStorage.getItem(this.KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        this.setState({
+          screen: d.account ? 'app' : 'login',
+          account: d.account || '',
+          chats: (d.chats && d.chats.length) ? this.normalizeChats(d.chats) : this.seedChats(),
+          activeId: d.activeId || null,
+          pinnedIds: d.pinnedIds || [],
+          memory: (d.memory && d.memory.length) ? d.memory : this.seedMemory(),
+          mode: d.mode || 'campus',
+          reactions: d.reactions || {},
+          dept: d.dept || '',
+          semester: d.semester || '',
+        });
+        return;
+      }
+    } catch (e) {}
+    this.setState({ memory: this.seedMemory(), chats: this.seedChats() });
+  }
+  persist() {
+    const { account, chats, activeId, memory, pinnedIds, mode, reactions, dept, semester } = this.state;
+    try { localStorage.setItem(this.KEY, JSON.stringify({ account, chats, activeId, memory, pinnedIds, mode, reactions, dept, semester })); } catch (e) {}
+  }
+  seedMemory() {
+    return [
+      { id: 'm1', text: 'Sophomore, Computer Science major in the College of Engineering.' },
+      { id: 'm2', text: 'Academic advisor is Dr. Patel; advising hours Tue & Thu afternoons.' },
+      { id: 'm3', text: 'Prefers reminders the day before any registration or aid deadline.' },
+    ];
+  }
+  seedChats() {
+    const mk = (id, title, bucket, q, a) => ({ id, title, bucket, messages: [
+      { id: id + 'u', role: 'user', content: q, time: this.now() },
+      { id: id + 'a', role: 'assistant', mstate: 'done', content: a, time: this.now(), words: a.split(/(\s+)/).filter(t => t.length).map(t => ({ t })) },
+    ] });
+    return [
+      mk('s1', 'Spring add/drop deadline', 'Today', 'When does add/drop close?', 'Add/drop for spring closes Friday, January 31 at 11:59 PM. After that, a dropped course shows a “W” on your transcript.'),
+      mk('s2', 'Financial aid for next year', 'Today', 'How do I start my aid application?', 'File the FAFSA with Merzal AI’s school code, then complete the institutional form under Financial Aid › Applications by March 1.'),
+      mk('s3', 'Dr. Patel’s office hours', 'Yesterday', 'When can I meet my advisor?', 'Dr. Patel holds advising hours Tuesday and Thursday, 2–4 PM, in Engineering 318.'),
+      mk('s4', 'Tonight’s dining hall menu', 'Yesterday', 'What’s for dinner at the Commons?', 'The Commons is serving herb-roasted chicken, a vegan grain bowl, and a ramen bar until 9 PM tonight.'),
+      mk('s5', 'Registering for CS 240', 'Previous 7 days', 'How do I register for CS 240?', 'CS 240 opens for sophomore registration on November 12. You’ve met the CS 140 prerequisite, so you’re clear to enroll.'),
+      mk('s6', 'Booking a library study room', 'Previous 7 days', 'Can I reserve a study room?', 'Yes — reserve a Hartwell Library group room up to 7 days ahead in the Spaces portal, in 2-hour blocks.'),
+      mk('s7', 'Parking permit renewal', 'Previous 7 days', 'When do I renew parking?', 'Student permits renew each August; the lot S-3 commuter permit you had last year is available to you again.'),
+    ];
+  }
+
+  activeChat() { return this.state.chats.find(c => c.id === this.state.activeId) || null; }
+  now() {
+    const d = new Date();
+    let h = d.getHours(), m = d.getMinutes();
+    const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    return h + ':' + String(m).padStart(2, '0') + ' ' + ap;
+  }
+  uid() { return 'c' + Date.now() + Math.floor(Math.random() * 999); }
+
+  // login
+  setEmailMode = () => this.setState({ loginMode: 'email', loginValue: '' });
+  setPhoneMode = () => this.setState({ loginMode: 'phone', loginValue: '' });
+  onLoginInput = (e) => this.setState({ loginValue: e.target.value });
+  doLogin = () => {
+    const v = this.state.loginValue.trim() || (this.state.loginMode === 'email' ? 'you@merzal.ai' : '+1 555 0100');
+    // If they already chose dept/semester before, skip setup
+    if (this.state.dept && this.state.semester) {
+      this.setState({ screen: 'app', account: v }, () => this.persist());
+    } else {
+      this.setState({ screen: 'setup', account: v }, () => this.persist());
+    }
+  };
+
+  doSetup = () => {
+    const B = (typeof window !== 'undefined' && window.BRAND) || {};
+    const depts = B.departments || [];
+    const sems  = B.semesters  || [];
+    const dept     = this.state.setupDept     || depts[0] || '';
+    const semester = this.state.setupSemester || sems[0]  || '';
+    this.setState({ screen: 'app', dept, semester, setupDept: '', setupSemester: '' }, () => this.persist());
+  };
+
+  saveDeptSemester = () => {
+    const dept     = this.state.setupDept     || this.state.dept;
+    const semester = this.state.setupSemester || this.state.semester;
+    this.setState({ dept, semester, setupDept: '', setupSemester: '' }, () => this.persist());
+  };
+
+  logout = () => this.setState({ screen: 'login', account: '', dept: '', semester: '', settingsOpen: false }, () => this.persist());
+
+  // chats
+  newChat = () => {
+    if (this.isGenerating()) return;
+    this.setState({ activeId: null, drawerOpen: false, activeMsgId: null, editingId: null, renamingId: null, renameText: '', contextMenuId: null }, () => this.persist());
+  };
+  selectChat(id) {
+    this.setState({ activeId: id, drawerOpen: false, activeMsgId: null, editingId: null, renamingId: null, renameText: '', contextMenuId: null }, () => this.persist());
+  }
+
+  toggleSidebar = () => {
+    if (this.state.isMobile) this.setState(s => ({ drawerOpen: !s.drawerOpen }));
+    else this.setState(s => ({ collapsed: !s.collapsed }));
+  };
+  toggleMsgActions(id) {
+    if (this.state.editingId) return;
+    this.setState(s => ({ activeMsgId: s.activeMsgId === id ? null : id }));
+  }
+  copyMsg(id, text) {
+    try { if (navigator.clipboard) navigator.clipboard.writeText(text || ''); } catch (e) {}
+    this.setState({ copiedId: id });
+    setTimeout(() => { if (this.state.copiedId === id) this.setState({ copiedId: null }); }, 1500);
+  }
+  startEdit(id, text) { this.setState({ editingId: id, editText: text, activeMsgId: null }); }
+  onEditInput = (e) => this.setState({ editText: e.target.value });
+  cancelEdit = () => this.setState({ editingId: null, editText: '' });
+  saveEdit(id) {
+    const text = this.state.editText.trim();
+    const chat = this.activeChat();
+    if (!text || !chat) { this.cancelEdit(); return; }
+    this.setState(s => {
+      const chats = s.chats.map(c => {
+        if (c.id !== chat.id) return c;
+        const idx = c.messages.findIndex(m => m.id === id);
+        const msgs = c.messages.slice(0, idx + 1).map(m => m.id === id ? { ...m, content: text } : m);
+        return { ...c, messages: msgs };
+      });
+      return { chats, editingId: null, editText: '', activeMsgId: null };
+    }, () => { this.persist(); if (this.state.online) this.startGeneration(chat.id); });
+  }
+  resendMsg(id) {
+    const chat = this.activeChat();
+    if (!chat || this.isGenerating()) return;
+    this.setState(s => {
+      const chats = s.chats.map(c => {
+        if (c.id !== chat.id) return c;
+        const idx = c.messages.findIndex(m => m.id === id);
+        return { ...c, messages: c.messages.slice(0, idx + 1) };
+      });
+      return { chats, activeMsgId: null };
+    }, () => { this.persist(); if (this.state.online) this.startGeneration(chat.id); });
+  }
+
+  onInput = (e) => {
+    this.setState({ input: e.target.value });
+    const ta = e.target; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+  };
+  onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); } };
+  onSearch = (e) => this.setState({ search: e.target.value });
+  usePrompt(text) { this.setState({ input: text }, () => this.send()); }
+
+  scrollBottom() {
+    const el = this._scroll;
+    if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+  }
+
+  send = () => {
+    const text = this.state.input.trim();
+    const atts = this.state.attachments;
+    if ((!text && atts.length === 0) || this.isGenerating()) return;
+
+    let chat = this.activeChat();
+    let chats = this.state.chats.slice();
+    const title = text || (atts.length ? atts.map(a => a.name).join(', ') : '');
+    if (!chat) {
+      chat = { id: this.uid(), title: title.length > 38 ? title.slice(0, 38) + '\u2026' : title, bucket: 'Today', messages: [] };
+      chats = [chat, ...chats];
+    } else {
+      chats = chats.map(c => c.id === chat.id ? { ...c, messages: c.messages.slice() } : c);
+      chat = chats.find(c => c.id === chat.id);
+    }
+
+    // Build attachment metadata (file refs for backend, previews for UI)
+    const attachmentData = atts.map(a => {
+      const isImage = a.file && a.file.type && a.file.type.startsWith('image/');
+      let preview = null;
+      if (isImage && a.objectUrl) preview = a.objectUrl;
+      return { id: a.id, name: a.name, type: a.file ? a.file.type : 'unknown', size: a.file ? a.file.size : 0, isImage, preview, file: a.file };
+    });
+
+    const offline = !this.state.online;
+    const userMsg = {
+      id: this.uid(), role: 'user', content: text, time: this.now(), queued: offline,
+      attachments: attachmentData.length > 0 ? attachmentData : undefined,
+    };
+    chat.messages.push(userMsg);
+
+    // ── Backend hook ──
+    // When you connect your backend, replace startGeneration() with a call like:
+    //   window.MerzalAPI.sendMessage({ chatId: chat.id, text, attachments: attachmentData })
+    // The attachmentData[].file is the raw File object for upload (FormData).
+
+    this.setState({ chats, activeId: chat.id, input: '', attachments: [] }, () => {
+      this.persist(); this.scrollBottom();
+      if (offline) return;
+      this.startGeneration(chat.id);
+    });
+  };
+
+  startGeneration(chatId) {
+    const mode = this.state.mode || 'campus';
+    const full = this.pickResponse(mode);
+    const aId = this.uid();
+    this.updateChat(chatId, c => {
+      c.messages.push({ id: aId, role: 'assistant', mstate: 'thinking', phase: 'Connecting…', words: [], full, mode, time: this.now(), start: Date.now() });
+    });
+    this.scrollBottom();
+
+    const phases = ['Reading your message', 'Searching memory', 'Thinking', 'Composing a reply'];
+    let pi = 0;
+    this.setMsg(chatId, aId, m => { m.phase = phases[0]; });
+    this.timers.phase = setInterval(() => {
+      pi++;
+      if (pi < phases.length) this.setMsg(chatId, aId, m => { m.phase = phases[pi]; });
+    }, 850);
+
+    this.timers.start = setTimeout(() => {
+      clearInterval(this.timers.phase);
+      this.setMsg(chatId, aId, m => { m.mstate = 'streaming'; });
+      const tokens = full.split(/(\s+)/).filter(t => t.length);
+      let i = 0;
+      this.timers.stream = setInterval(() => {
+        if (i >= tokens.length) {
+          clearInterval(this.timers.stream);
+          this.setMsg(chatId, aId, m => { m.mstate = 'done'; m.content = full; });
+          this.scrollBottom();
+          return;
+        }
+        // append 1-2 tokens per tick for natural pacing
+        const step = Math.random() > 0.5 ? 2 : 1;
+        this.setMsg(chatId, aId, m => {
+          for (let k = 0; k < step && i < tokens.length; k++, i++) m.words.push({ t: tokens[i] });
+        });
+        if (i % 8 === 0) this.scrollBottom();
+      }, 55);
+    }, 3000);
+  }
+
+  updateChat(chatId, fn) {
+    this.setState(s => {
+      const chats = s.chats.map(c => {
+        if (c.id !== chatId) return c;
+        const nc = { ...c, messages: c.messages.slice() };
+        fn(nc);
+        return nc;
+      });
+      return { chats };
+    }, () => this.persist());
+  }
+  setMsg(chatId, msgId, fn) {
+    this.setState(s => {
+      const chats = s.chats.map(c => {
+        if (c.id !== chatId) return c;
+        const messages = c.messages.map(m => {
+          if (m.id !== msgId) return m;
+          const nm = { ...m, words: m.words ? m.words.slice() : m.words };
+          fn(nm);
+          return nm;
+        });
+        return { ...c, messages };
+      });
+      return { chats };
+    });
+  }
+
+  pickResponse(mode) {
+    const campusPool = [
+      "Add/drop for the spring term closes on Friday, January 31 at 11:59 PM. After that date, dropping a course leaves a “W” on your transcript instead of removing it.\n\nSince you’re in the College of Engineering, remember that dropping below 12 credits can affect both your full-time status and any merit aid tied to it. If you’re thinking about adjusting your schedule, it’s worth a quick note to Dr. Patel first — advising hours are Tuesday and Thursday afternoons.\n\nWant me to draft that email or pull up the official academic calendar?",
+      "Financial aid for next year runs through the Merzal AI Student Portal, not a third party — everything stays on the university’s own systems.\n\nStart with the FAFSA using Merzal AI’s school code, then complete the institutional aid form under Financial Aid › Applications. Priority deadline is March 1; filing before then puts you in the running for need-based grants and work-study. Returning students with your GPA are also auto-considered for the Dean’s merit award — no separate application needed.\n\nI can set a reminder a day before the March 1 deadline if you’d like.",
+      "Right now it’s 11:48 PM, so most of campus is winding down, but a few places are still open: the Hartwell Library 24-hour study wing, the Engineering Building computer labs (your card has access until 2 AM), and the late-night counter at the Commons until midnight.\n\nEverything I’m telling you comes from Merzal AI’s own facilities and dining feeds, kept entirely on campus servers — nothing about your schedule or location leaves the university.\n\nWant the walking directions to the library study wing?",
+    ];
+    const worldPool = [
+      "Sure — think of recursion as a function that solves a small piece of a problem and then asks a smaller copy of itself to handle the rest. Two things make it work: a base case (when to stop) and a recursive step (how the smaller call gets closer to that stop).\n\nA classic example is factorial: factorial(n) returns n times factorial(n − 1), and factorial(0) is just 1. The stack unwinds back up once it hits the base case.\n\nWant me to walk through a worked example in your language of choice?",
+      "The fastest way to learn a new language is to use it from day one for something you actually care about — order coffee, journal one sentence a night, label things around you. Comprehensible input (podcasts, shows with subtitles in the target language) builds your ear faster than flashcards alone.\n\nSpaced repetition apps like Anki are great for vocabulary, but pair them with output: short conversations, even with a voice AI, lock the words in.\n\nWant a 30-day starter plan tailored to a specific language?",
+      "Photosynthesis is how plants turn sunlight, water, and carbon dioxide into glucose (their food) and oxygen (a useful byproduct for us). It happens mostly in the leaves, inside organelles called chloroplasts, which contain the green pigment chlorophyll.\n\nThe overall equation: 6 CO₂ + 6 H₂O + light energy → C₆H₁₂O₆ + 6 O₂.\n\nWant me to break down the light reactions vs. the Calvin cycle in more detail?",
+    ];
+    const pool = mode === 'world' ? worldPool : campusPool;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // connection demo: cycle online -> slow -> offline
+  toggleConn = () => {
+    this.setState(s => {
+      if (s.online && !s.slow) return { slow: true };
+      if (s.slow) return { slow: false, online: false };
+      return { online: true, slow: false };
+    }, () => {
+      // when reconnecting, flush queued user messages that have no reply yet
+      if (this.state.online && !this.state.slow) this.flushQueued();
+    });
+  };
+  flushQueued() {
+    const chat = this.activeChat();
+    if (!chat) return;
+    const hasQueued = chat.messages.some(m => m.queued);
+    if (!hasQueued) return;
+    this.updateChat(chat.id, c => { c.messages.forEach(m => { if (m.queued) m.queued = false; }); });
+    const last = chat.messages[chat.messages.length - 1];
+    const replied = chat.messages.some(m => m.role === 'assistant');
+    if (last && last.role === 'user' && !replied) {
+      setTimeout(() => this.startGeneration(chat.id), 300);
+    }
+  }
+
+  deleteChat(id) {
+    this.setState(s => {
+      const chats = s.chats.filter(c => c.id !== id);
+      const activeId = s.activeId === id ? (chats[0] ? chats[0].id : null) : s.activeId;
+      return { chats, activeId };
+    }, () => this.persist());
+  }
+
+  attachFile = () => { if (this._fileInput) this._fileInput.click(); };
+  attachPhoto = () => { if (this._photoInput) this._photoInput.click(); };
+  openCamera = () => { if (this._cameraInput) this._cameraInput.click(); };
+
+  handleFiles(files) {
+    const newAtts = Array.from(files).map(f => {
+      const isImage = f.type && f.type.startsWith('image/');
+      return { id: this.uid(), name: f.name, file: f, objectUrl: isImage ? URL.createObjectURL(f) : null };
+    });
+    this.setState(s => ({ attachments: [...s.attachments, ...newAtts] }));
+  }
+  removeAttachment(id) { this.setState(s => ({ attachments: s.attachments.filter(a => a.id !== id) })); }
+
+  // ── Context menu ─────────────────────────────────────
+  openContextMenu(chatId, e) {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuH = 228;
+    const top = (rect.bottom + menuH > window.innerHeight) ? rect.top - menuH : rect.bottom + 4;
+    const left = Math.max(4, Math.min(rect.right - 4, window.innerWidth - 214));
+    this.setState({ contextMenuId: chatId, contextMenuPos: { top, left } });
+  }
+  closeContextMenu = () => this.setState({ contextMenuId: null, contextMenuPos: null });
+
+  // ── Pin / Unpin ───────────────────────────────────────
+  togglePin(chatId) {
+    this.setState(s => {
+      const pinnedIds = (s.pinnedIds || []).includes(chatId)
+        ? s.pinnedIds.filter(id => id !== chatId)
+        : [...(s.pinnedIds || []), chatId];
+      return { pinnedIds, contextMenuId: null, contextMenuPos: null };
+    }, () => this.persist());
+  }
+
+  // ── Rename ────────────────────────────────────────────
+  startRename(chatId) {
+    const chat = this.state.chats.find(c => c.id === chatId);
+    this.setState({ renamingId: chatId, renameText: chat ? chat.title : '', contextMenuId: null, contextMenuPos: null });
+  }
+  onRenameInput = (e) => this.setState({ renameText: e.target.value });
+  onRenameKey = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); this.saveRename(); }
+    if (e.key === 'Escape') { e.preventDefault(); this.cancelRename(); }
+  };
+  saveRename = () => {
+    const text = this.state.renameText.trim();
+    const chatId = this.state.renamingId;
+    if (!chatId) return;
+    if (!text) { this.cancelRename(); return; }
+    this.setState(s => ({
+      chats: s.chats.map(c => c.id === chatId ? { ...c, title: text } : c),
+      renamingId: null, renameText: '',
+    }), () => this.persist());
+  };
+  cancelRename = () => this.setState({ renamingId: null, renameText: '' });
+
+  // ── Share ─────────────────────────────────────────────
+  shareChat(chatId) {
+    try { if (navigator.clipboard) navigator.clipboard.writeText(window.location.origin + '/chat/' + chatId); } catch (e) {}
+    this.setState({ contextMenuId: null, contextMenuPos: null });
+    this.showToastMsg('Link copied to clipboard');
+  }
+
+  // ── Group chat ────────────────────────────────────────
+  startGroupChat() {
+    this.setState({ contextMenuId: null, contextMenuPos: null });
+    this.showToastMsg('Group chat coming soon');
+  }
+
+  // ── Toast ─────────────────────────────────────────────
+  showToastMsg(msg) {
+    this.setState({ toast: msg });
+    clearTimeout(this.timers.toast);
+    this.timers.toast = setTimeout(() => this.setState({ toast: null }), 2500);
+  }
+
+  // ── Delete from menu ──────────────────────────────────
+  deleteChatFromMenu(chatId) {
+    this.setState({ contextMenuId: null, contextMenuPos: null });
+    setTimeout(() => this.deleteChat(chatId), 60);
+  }
+
+  // ── Mode switcher (Campus = your knowledge base, World = general AI) ─────
+  toggleModeMenu = () => this.setState(s => ({ showModeMenu: !s.showModeMenu }));
+  closeModeMenu = () => this.setState({ showModeMenu: false });
+  setMode(mode) { this.setState({ mode, showModeMenu: false }, () => this.persist()); }
+
+  // ── Stop generating (cancels timers, freezes assistant message at current text) ──
+  stopGeneration = () => {
+    const chat = this.activeChat();
+    if (!chat) return;
+    clearInterval(this.timers.phase);
+    clearInterval(this.timers.stream);
+    clearTimeout(this.timers.start);
+    this.updateChat(chat.id, c => {
+      c.messages.forEach(m => {
+        if (m.role === 'assistant' && (m.mstate === 'thinking' || m.mstate === 'streaming')) {
+          const text = (m.words || []).map(w => w.t).join('');
+          m.mstate = 'done';
+          m.content = text || '(stopped)';
+          m.stopped = true;
+        }
+      });
+    });
+    // Backend hook: window.MerzalAPI?.cancelGeneration?.({ chatId: chat.id });
+  };
+
+  // ── Regenerate assistant reply (drop msg, re-run generation) ─────────────
+  regenerate(msgId) {
+    const chat = this.activeChat();
+    if (!chat || this.isGenerating()) return;
+    this.setState(s => {
+      const chats = s.chats.map(c => {
+        if (c.id !== chat.id) return c;
+        const idx = c.messages.findIndex(m => m.id === msgId);
+        return { ...c, messages: c.messages.slice(0, idx) };
+      });
+      return { chats };
+    }, () => { this.persist(); this.startGeneration(chat.id); });
+  }
+
+  // ── Like / Dislike (thumbs feedback) ─────────────────────────────────────
+  reactMessage(msgId, kind) {
+    this.setState(s => {
+      const reactions = { ...s.reactions };
+      if (reactions[msgId] === kind) delete reactions[msgId];
+      else reactions[msgId] = kind;
+      return { reactions };
+    }, () => {
+      this.persist();
+      // Backend hook: window.MerzalAPI?.sendFeedback?.({ messageId: msgId, reaction: this.state.reactions[msgId] || null });
+      this.showToastMsg(kind === 'up' ? 'Thanks — feedback noted' : 'Got it — we’ll improve');
+    });
+  }
+
+  // ── Share / copy an assistant reply ──────────────────────────────────────
+  shareMessage(msgId) {
+    const chat = this.activeChat();
+    if (!chat) return;
+    const m = chat.messages.find(mm => mm.id === msgId);
+    if (!m) return;
+    const text = m.content || (m.words || []).map(w => w.t).join('');
+    try { if (navigator.clipboard) navigator.clipboard.writeText(text); } catch (e) {}
+    this.showToastMsg('Reply copied — paste anywhere');
+  }
+
+  openDrawer = () => this.setState({ drawerOpen: true });
+  closeDrawer = () => this.setState({ drawerOpen: false });
+  openSettings = () => this.setState({ settingsOpen: true, drawerOpen: false });
+  closeSettings = () => this.setState({ settingsOpen: false });
+  stop = (e) => { e.stopPropagation(); };
+  removeMemory(id) { this.setState(s => ({ memory: s.memory.filter(m => m.id !== id) }), () => this.persist()); }
+  clearMemory = () => this.setState({ memory: [] }, () => this.persist());
+
+  renderVals() {
+    const s = this.state;
+    const isMobile = s.isMobile;
+    const accent = this.props.accent || '#bf5e36';
+    const chat = this.activeChat();
+    const messages = chat ? chat.messages : [];
+
+    const tabBase = 'flex:1;height:38px;border:none;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .15s';
+    const tabOn = tabBase + ';background:#fff;color:#1d1a16;box-shadow:0 1px 4px -1px #00000018';
+    const tabOff = tabBase + ';background:transparent;color:#857e72';
+
+    // sidebar
+    const sidebarBase = 'width:272px;flex:none;background:#efe9dd;border-right:1px solid #e6e0d2;display:flex;flex-direction:column;height:100vh;position:relative';
+    let sidebarStyle;
+    if (isMobile) {
+      sidebarStyle = sidebarBase + ';position:absolute;left:0;top:0;z-index:35;box-shadow:0 0 50px -8px #00000033;transition:transform .28s cubic-bezier(.4,0,.2,1);transform:translateX(' + (s.drawerOpen ? '0' : '-100%') + ')';
+    } else if (s.collapsed) {
+      sidebarStyle = 'width:0;flex:none;background:#efe9dd;border-right:none;display:flex;flex-direction:column;height:100vh;overflow:hidden;transition:width .25s ease';
+    } else {
+      sidebarStyle = sidebarBase + ';transition:width .25s ease';
+    }
+    const menuBtnStyle = (!isMobile && !s.collapsed)
+      ? 'display:none'
+      : 'width:34px;height:34px;border:1px solid #e0d9ca;border-radius:8px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none';
+
+    const pinnedIds = s.pinnedIds || [];
+    const q = (s.search || '').trim().toLowerCase();
+    const visible = s.chats.filter(c => !q || c.title.toLowerCase().includes(q));
+
+    const mkRow = (c) => {
+      const on = c.id === s.activeId;
+      const isPinned = pinnedIds.includes(c.id);
+      const isRenaming = s.renamingId === c.id;
+      return {
+        title: c.title,
+        isPinned,
+        isRenaming,
+        notRenaming: !isRenaming,
+        select: () => this.selectChat(c.id),
+        openMenu: (e) => { e.stopPropagation(); this.openContextMenu(c.id, e); },
+        rowStyle: 'display:flex;align-items:center;padding:7px 11px;border-radius:9px;font-size:13.5px;cursor:pointer;margin-bottom:1px;min-width:0;gap:4px;' + (on ? 'background:#fff;color:#1d1a16;font-weight:600;box-shadow:inset 3px 0 0 ' + accent + ',0 1px 3px -1px #6b604a33;' : 'background:transparent;color:#5a544a;font-weight:400;'),
+      };
+    };
+
+    const pinned = visible.filter(c => pinnedIds.includes(c.id));
+    const unpinned = visible.filter(c => !pinnedIds.includes(c.id));
+    const order = ['Today', 'Yesterday', 'Previous 7 days'];
+    const chatGroups = [
+      ...(pinned.length ? [{ label: 'Pinned', items: pinned.map(mkRow) }] : []),
+      ...order.map(label => ({ label, items: unpinned.filter(c => (c.bucket || 'Today') === label).map(mkRow) })).filter(g => g.items.length),
+    ];
+
+    // Context menu computed
+    const ctxChat = s.contextMenuId ? s.chats.find(c => c.id === s.contextMenuId) : null;
+    const ctxIsPinned = ctxChat && pinnedIds.includes(ctxChat.id);
+    const ctxPinLabel = ctxIsPinned ? 'Unpin chat' : 'Pin chat';
+    const ctxPos = s.contextMenuPos;
+    const contextMenuStyle = ctxPos
+      ? 'position:fixed;top:' + ctxPos.top + 'px;left:' + ctxPos.left + 'px;z-index:50;width:210px;background:#fff;border:1px solid #e6e0d2;border-radius:12px;box-shadow:0 8px 28px -6px #00000028,0 2px 8px -2px #00000018;padding:5px;animation:mz-fadein .15s ease both'
+      : 'display:none';
+    const showContextMenu = !!s.contextMenuId;
+    const showToast = !!s.toast;
+    const toastText = s.toast || '';
+
+    // connection
+    let connLabel, connDot, connText, bannerText, bannerDot, showBanner, bannerBg;
+    if (!s.online) {
+      connLabel = 'Offline'; connDot = '#c0563a'; showBanner = true;
+      bannerText = "You're offline — messages queue and send when you reconnect."; bannerDot = '#c0563a'; bannerBg = '#fbeee6';
+    } else if (s.slow) {
+      connLabel = 'Slow'; connDot = '#d39a3a'; showBanner = true;
+      bannerText = 'Connection is slow — responses may take longer to stream.'; bannerDot = '#d39a3a'; bannerBg = '#fdf6e8';
+    } else {
+      connLabel = 'Live'; connDot = '#5e8a6e'; showBanner = false;
+    }
+    const connPillStyle = 'display:flex;align-items:center;gap:7px;height:30px;padding:0 12px;border:1px solid #e2dbcc;border-radius:20px;background:#fff;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#6a6358;cursor:pointer';
+    const bannerStyle = 'padding:9px 18px;background:' + bannerBg + ';border-bottom:1px solid #00000010;font-size:13px;color:#6a5a48;display:flex;align-items:center';
+
+    const isGen = this.isGenerating();
+    const reactions = s.reactions || {};
+
+    const msgVals = messages.map(m => {
+      const isUser = m.role === 'user';
+      const isDone = m.role === 'assistant' && m.mstate === 'done';
+      const myReaction = reactions[m.id] || null;
+      return {
+        isUser,
+        isAssistant: m.role === 'assistant',
+        isThinking: m.mstate === 'thinking',
+        isText: m.role === 'assistant' && (m.mstate === 'streaming' || m.mstate === 'done'),
+        isStreaming: m.mstate === 'streaming',
+        isDone,
+        name: isUser ? 'You' : '{{ brandAiName }}',
+        time: m.time,
+        content: m.content,
+        id: m.id,
+        isEditing: s.editingId === m.id,
+        notEditing: s.editingId !== m.id,
+        copyLabel: s.copiedId === m.id ? 'Copied' : 'Copy',
+        toggle: () => this.toggleMsgActions(m.id),
+        copy: () => this.copyMsg(m.id, m.content || (m.words || []).map(w => w.t).join('')),
+        edit: () => this.startEdit(m.id, m.content),
+        resend: () => this.resendMsg(m.id),
+        saveEdit: () => this.saveEdit(m.id),
+        like: () => this.reactMessage(m.id, 'up'),
+        dislike: () => this.reactMessage(m.id, 'down'),
+        regenerate: () => this.regenerate(m.id),
+        shareMsg: () => this.shareMessage(m.id),
+        likeBtnClass: 'mz-act-btn' + (myReaction === 'up' ? ' is-on' : ''),
+        dislikeBtnClass: 'mz-act-btn' + (myReaction === 'down' ? ' is-on' : ''),
+        likeFill: myReaction === 'up' ? '#bf5e36' : 'none',
+        dislikeFill: myReaction === 'down' ? '#bf5e36' : 'none',
+        modeTag: !!m.mode,
+        modeLabel: m.mode === 'world' ? 'World' : 'Campus',
+        stopped: !!m.stopped,
+        words: m.words || [],
+        hasContent: !!(m.content && m.content.trim()),
+        hasAttachments: !!(m.attachments && m.attachments.length),
+        attachments: (m.attachments || []).map(a => ({
+          name: a.name,
+          isImage: a.isImage,
+          notImage: !a.isImage,
+          preview: a.preview,
+          bgImg: a.isImage && a.preview ? `url(${a.preview})` : 'none',
+          sizeLabel: a.size < 1024 ? a.size + ' B' : a.size < 1048576 ? Math.round(a.size / 1024) + ' KB' : (a.size / 1048576).toFixed(1) + ' MB',
+        })),
+        phase: m.phase || '',
+        queued: !!m.queued,
+        elapsed: m.start ? Math.max(0, Math.round((Date.now() - m.start) / 1000)) + 's' : '',
+        avatarChar: isUser ? (s.account ? s.account[0].toUpperCase() : 'Y') : 'R',
+        avatarStyle: isUser
+          ? 'width:18px;height:18px;border-radius:50%;background:#d9cbbf;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#7a5440;flex:none'
+          : 'width:18px;height:18px;border-radius:5px;background:' + accent + ';display:flex;align-items:center;justify-content:center;font-family:\'Cormorant Garant\',serif;font-style:italic;font-size:14px;color:#fff;flex:none;line-height:1',
+      };
+    });
+
+    const sendActive = s.input.trim().length > 0;
+    const sendStyle = isGen
+      ? 'width:38px;height:38px;flex:none;border:none;border-radius:11px;cursor:pointer;background:#1d1a16;color:#fff;display:flex;align-items:center;justify-content:center;transition:all .15s'
+      : ('width:38px;height:38px;flex:none;border:none;border-radius:11px;cursor:' + (sendActive ? 'pointer' : 'default') + ';background:' + (sendActive ? accent : '#e6e0d2') + ';color:' + (sendActive ? '#fff' : '#b3ab9d') + ';display:flex;align-items:center;justify-content:center;transition:all .15s');
+
+    // Mode pill + popover
+    const mode = s.mode || 'campus';
+    const modeLabel = mode === 'world' ? 'World' : 'Campus';
+    const modeDot = mode === 'world' ? '#5e8a6e' : accent;
+    const modePillStyle = 'display:flex;align-items:center;gap:7px;height:32px;padding:0 11px 0 10px;border:1px solid #e2dbcc;border-radius:10px;background:#fbf6ea;color:#33302a;font-size:13px;font-weight:600;cursor:pointer;flex:none;transition:all .12s';
+    const modeBtnBase = 'width:100%;display:flex;align-items:center;gap:11px;padding:10px 11px;border:none;border-radius:9px;background:transparent;cursor:pointer;text-align:left;font:inherit;transition:background .12s';
+    const modeCampusBtnStyle = modeBtnBase + (mode === 'campus' ? ';background:#fbf1ec' : '');
+    const modeWorldBtnStyle  = modeBtnBase + (mode === 'world'  ? ';background:#fbf1ec' : '');
+    const modeCampusBg = '#fbf1ec'; const modeCampusFg = '#bf5e36';
+    const modeWorldBg  = '#eef3ef'; const modeWorldFg  = '#5e8a6e';
+
+    const hours = new Date().getHours();
+    const greeting = hours < 12 ? 'Good morning.' : hours < 18 ? 'Good afternoon.' : 'Good evening.';
+    const loginTags = ['Persistent memory', 'Streaming answers', 'Conversation history'];
+
+    const loginWrapStyle = 'height:100vh;width:100%;display:flex;' + (isMobile ? 'flex-direction:column' : '');
+    const loginHeroStyle = isMobile
+      ? 'background:#0f0d0a;color:#f0ead8;padding:18px 22px;display:flex;flex-direction:row;align-items:center;gap:14px;position:relative;overflow:hidden;flex:none'
+      : 'flex:1;min-width:0;background:radial-gradient(ellipse at 22% 65%,#291d0e 0%,#1a1612 45%,#0e0c0a 100%);color:#f0ead8;padding:62px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden';
+    const loginH1Style = 'font-family:\'Cormorant Garant\',serif;font-weight:300;line-height:1.05;letter-spacing:-.02em;color:#f0ead8;' + (isMobile ? 'font-size:30px;margin:0 0 10px' : 'font-size:54px;margin:0 0 16px');
+    const loginPStyle = 'line-height:1.55;color:#bcae9c;margin:0;' + (isMobile ? 'font-size:13.5px' : 'font-size:15px;max-width:400px');
+    const loginFormPaneStyle = isMobile
+      ? 'flex:1;min-width:0;background:#f6f3ec;display:flex;align-items:flex-start;justify-content:center;padding:26px 22px 40px;overflow-y:auto'
+      : 'flex:1;min-width:0;background:#f6f3ec;display:flex;align-items:center;justify-content:center;padding:40px';
+    const emptyStyle = 'height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;' + (isMobile ? 'padding:24px 20px' : 'padding:32px');
+    const convoStyle = 'max-width:760px;margin:0 auto;' + (isMobile ? 'padding:18px 15px 12px' : 'padding:28px 22px 16px');
+    const bubbleMaxWidth = isMobile ? '92%' : '80%';
+    const promptBtnStyle = 'border:1px solid #e2dbcc;border-radius:11px;background:#fff;padding:11px 15px;font-size:13.5px;color:#3f3a32;cursor:pointer;text-align:left;' + (isMobile ? 'width:100%' : 'max-width:240px');
+    const toolbarBtnSize = isMobile ? '44px' : '34px';
+    const composerWrapStyle = 'background:linear-gradient(180deg,transparent,#f6f3ec 30%);' + (isMobile ? 'padding:10px 12px 14px' : 'padding:14px 18px 20px');
+    const settingsOverlayStyle = 'position:absolute;inset:0;background:#1d1a1655;z-index:40;display:flex;justify-content:center;' + (isMobile ? 'align-items:flex-end;padding:0' : 'align-items:center;padding:24px') + ';animation:mz-fadein .25s ease both';
+    const settingsCardStyle = 'width:100%;background:#f6f3ec;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px -20px #1d1a1666;animation:mz-rise .3s ease both;' + (isMobile ? 'max-width:100%;max-height:90vh;border-radius:20px 20px 0 0' : 'max-width:560px;max-height:84vh;border-radius:18px');
+
+    const B = (typeof window !== 'undefined' && window.BRAND) || {};
+    const brandName        = B.name           || 'Merzal AI';
+    const brandLogo        = B.logoLetter     || 'M';
+    const brandBadge       = B.loginBadge     || 'Campus AI · Secured by MerzalLabs';
+    const brandHeroTitle   = B.loginHeroTitle || 'The AI that actually knows your campus.';
+    const brandHeroDesc    = B.loginHeroDesc  || 'A private assistant running securely on-premises. Your data never leaves. Powered by MerzalLabs.';
+    const brandLoginSubtitle = B.loginSubtitle || 'Sign in with your Merzal AI account.';
+    const brandSsoLabel    = B.ssoLabel       || 'Continue with University SSO';
+    const brandLoginFooter = B.loginFooter    || 'Hosted on-premises · Secured by MerzalLabs · FERPA-compliant.';
+    const brandSidebarSub  = B.sidebarSub     || 'Campus · On-premises';
+    const brandAiName      = B.aiName         || 'Merzal AI';
+    const brandEmptyDesc   = B.emptyDesc      || 'Ask about courses, deadlines, financial aid, or campus life — I keep it private.';
+    const brandDisclaimer  = B.disclaimer     || 'Merzal AI can make mistakes. Private & on-premises · memory on.';
+    const features = B.loginFeatures || ['On-premises', 'FERPA-ready', 'Private by default'];
+    const brandFeature0 = features[0] || '';
+    const brandFeature1 = features[1] || '';
+    const brandFeature2 = features[2] || '';
+
+    return {
+      brandName, brandLogo, brandBadge, brandHeroTitle, brandHeroDesc,
+      brandLoginSubtitle, brandSsoLabel, brandLoginFooter, brandSidebarSub,
+      brandAiName, brandEmptyDesc, brandDisclaimer,
+      brandFeature0, brandFeature1, brandFeature2,
+      loginWrapStyle, loginHeroStyle, loginH1Style, loginPStyle, loginFormPaneStyle,
+      showHeroExtras: !isMobile,
+      showHeroText: !isMobile,
+      emptyStyle, convoStyle, composerWrapStyle, settingsOverlayStyle, settingsCardStyle,
+      bubbleMaxWidth, promptBtnStyle, toolbarBtnSize,
+      isLogin: s.screen === 'login',
+      isSetup: s.screen === 'setup',
+      isApp: s.screen === 'app',
+      // login
+      loginTag: loginTags[s.loginTagIdx],
+      emailTabStyle: s.loginMode === 'email' ? tabOn : tabOff,
+      phoneTabStyle: s.loginMode === 'phone' ? tabOn : tabOff,
+      loginFieldLabel: s.loginMode === 'email' ? 'Email address' : 'Phone number',
+      loginPlaceholder: s.loginMode === 'email' ? 'you@example.com' : '+1 (555) 000-0000',
+      loginValue: s.loginValue,
+      onLoginInput: this.onLoginInput,
+      setEmailMode: this.setEmailMode, setPhoneMode: this.setPhoneMode, doLogin: this.doLogin,
+      doSetup: this.doSetup,
+      setupDepts: (B.departments || ['Computer Science','Business','Engineering']).map(d => ({ val: d, label: d })),
+      setupSemesters: (B.semesters || ['Semester 1','Semester 2','Semester 3','Semester 4']).map(sem => ({ val: sem, label: sem })),
+      setupDept: s.setupDept || s.dept || (B.departments || [])[0] || '',
+      setupSemester: s.setupSemester || s.semester || (B.semesters || [])[0] || '',
+      onSetupDept: (e) => this.setState({ setupDept: e.target.value }),
+      onSetupSemester: (e) => this.setState({ setupSemester: e.target.value }),
+      settingsDept: s.setupDept || s.dept,
+      settingsSemester: s.setupSemester || s.semester,
+      onSettingsDept: (e) => this.setState({ setupDept: e.target.value }),
+      onSettingsSemester: (e) => this.setState({ setupSemester: e.target.value }),
+      saveDeptSemester: this.saveDeptSemester,
+      // app
+      isMobile,
+      sidebarStyle,
+      showScrim: isMobile && s.drawerOpen,
+      closeDrawer: this.closeDrawer, openDrawer: this.openDrawer,
+      newChat: this.newChat,
+      chatGroups,
+      showContextMenu, contextMenuStyle,
+      ctxPinLabel,
+      ctxShare: () => { if (s.contextMenuId) this.shareChat(s.contextMenuId); },
+      ctxStartGroup: () => this.startGroupChat(),
+      ctxRename: () => { if (s.contextMenuId) this.startRename(s.contextMenuId); },
+      ctxPin: () => { if (s.contextMenuId) this.togglePin(s.contextMenuId); },
+      ctxDelete: () => { if (s.contextMenuId) this.deleteChatFromMenu(s.contextMenuId); },
+      closeContextMenu: this.closeContextMenu,
+      showToast, toastText,
+      renameText: s.renameText,
+      onRenameInput: this.onRenameInput,
+      onRenameKey: this.onRenameKey,
+      saveRename: this.saveRename,
+      renameInputRef: (el) => { if (el) requestAnimationFrame(() => { try { el.focus(); el.select && el.select(); } catch(e){} }); },
+      search: s.search,
+      onSearch: this.onSearch,
+      userInitial: s.account ? s.account[0].toUpperCase() : 'Y',
+      accountName: s.account || 'Signed in',
+      openSettings: this.openSettings,
+      activeTitle: chat ? chat.title : 'New chat',
+      // connection
+      connLabel, connDot, connPillStyle, toggleConn: this.toggleConn,
+      showBanner, bannerText, bannerDot, bannerStyle,
+      // content
+      isEmpty: !chat || messages.length === 0,
+      hasMessages: !!chat && messages.length > 0,
+      messages: msgVals,
+      editText: s.editText,
+      onEditInput: this.onEditInput,
+      cancelEdit: this.cancelEdit,
+      toggleSidebar: this.toggleSidebar,
+      menuBtnStyle,
+      greeting,
+      prompts: [
+        { text: 'When is the add/drop deadline this term?', use: () => this.usePrompt('When is the add/drop deadline this term?') },
+        { text: 'How do I apply for financial aid?', use: () => this.usePrompt('How do I apply for financial aid?') },
+        { text: 'Find my advisor’s office hours', use: () => this.usePrompt('Find my advisor’s office hours') },
+        { text: 'What’s open on campus right now?', use: () => this.usePrompt('What’s open on campus right now?') },
+      ],
+      // input
+      input: s.input,
+      onInput: this.onInput, onKey: this.onKey, send: this.send,
+      inputPlaceholder: s.online ? (B.inputPlaceholder || 'Message Merzal AI…') : (B.inputPlaceholderOffline || 'Offline — message will queue…'),
+      sendStyle,
+      // send / stop toggle
+      isGenerating: isGen,
+      notGenerating: !isGen,
+      sendOrStop: isGen ? this.stopGeneration : this.send,
+      sendOrStopTitle: isGen ? 'Stop generating' : 'Send',
+      // mode switcher (Campus = your knowledge base, World = general AI)
+      mode, modeLabel, modeDot, modePillStyle,
+      isCampusMode: mode === 'campus',
+      isWorldMode: mode === 'world',
+      showModeMenu: !!s.showModeMenu,
+      toggleModeMenu: this.toggleModeMenu,
+      closeModeMenu: this.closeModeMenu,
+      pickCampus: () => this.setMode('campus'),
+      pickWorld: () => this.setMode('world'),
+      modeCampusBtnStyle, modeWorldBtnStyle,
+      modeCampusBg, modeCampusFg, modeWorldBg, modeWorldFg,
+      scrollRef: (el) => { this._scroll = el; },
+      attachFile: this.attachFile,
+      attachPhoto: this.attachPhoto,
+      openCamera: this.openCamera,
+      hasAttachment: s.attachments.length > 0,
+      attachments: s.attachments.map(a => ({ name: a.name, remove: () => this.removeAttachment(a.id) })),
+      fileInputRef: (el) => { if (el && el !== this._fileInput) { this._fileInput = el; el.onchange = (e) => { this.handleFiles(e.target.files); el.value = ''; }; } },
+      photoInputRef: (el) => { if (el && el !== this._photoInput) { this._photoInput = el; el.onchange = (e) => { this.handleFiles(e.target.files); el.value = ''; }; } },
+      cameraInputRef: (el) => { if (el && el !== this._cameraInput) { this._cameraInput = el; el.onchange = (e) => { this.handleFiles(e.target.files); el.value = ''; }; } },
+      // settings
+      settingsOpen: s.settingsOpen,
+      closeSettings: this.closeSettings, stop: this.stop,
+      memory: s.memory.map(m => ({ text: m.text, remove: () => this.removeMemory(m.id) })),
+      memoryCount: s.memory.length,
+      clearMemory: this.clearMemory,
+      accountLabel: s.account || '—',
+      logout: this.logout,
+    };
+  }
+}
+</script>
+</body>
+</html>
