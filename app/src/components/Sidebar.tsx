@@ -12,6 +12,8 @@ interface Props {
   onRename: (id: string, title: string) => void
   onPin: (id: string, pinned: boolean) => void
   onDelete: (id: string) => void
+  onShare: (id: string) => void
+  onExport: (id: string, fmt: 'pdf' | 'txt') => void
   onSettings: () => void
 }
 
@@ -88,9 +90,13 @@ export function Sidebar(p: Props) {
                 {menuFor === c.id && (
                   <>
                     <div onClick={() => setMenuFor(null)} style={{ position: 'fixed', inset: 0, zIndex: 48 }} />
-                    <div style={{ position: 'absolute', right: 6, top: 34, zIndex: 49, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 12px 30px -8px #0003', padding: 4, width: 160 }}>
+                    <div style={{ position: 'absolute', right: 6, top: 34, zIndex: 49, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 12px 30px -8px #0003', padding: 4, width: 184 }}>
                       <MenuItem label="Rename" onClick={() => startRename(c)} />
                       <MenuItem label={c.pinned ? 'Unpin' : 'Pin'} onClick={() => { p.onPin(c.id, !c.pinned); setMenuFor(null) }} />
+                      <div style={{ height: 1, background: 'var(--line)', margin: '3px 8px' }} />
+                      <MenuItem label="Share conversation" onClick={() => { p.onShare(c.id); setMenuFor(null) }} />
+                      <MenuItem label="Export as PDF" onClick={() => { p.onExport(c.id, 'pdf'); setMenuFor(null) }} />
+                      <MenuItem label="Export as Text" onClick={() => { p.onExport(c.id, 'txt'); setMenuFor(null) }} />
                       <div style={{ height: 1, background: 'var(--line)', margin: '3px 8px' }} />
                       <MenuItem label="Delete" danger onClick={() => { p.onDelete(c.id); setMenuFor(null) }} />
                     </div>

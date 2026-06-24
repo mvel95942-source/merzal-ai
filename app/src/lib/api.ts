@@ -11,6 +11,10 @@ async function uid(): Promise<string> {
   return data.user.id
 }
 
+const randomToken = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').slice(0, 14) : Math.random().toString(36).slice(2, 16))
+
+export interface SharedConversation { title: string; messages: Message[] }
+
 const realApi = {
   // ── AUTH ──────────────────────────────────────────────────────────
   // Invite-only: shouldCreateUser:false means an OTP is only sent to accounts
@@ -158,6 +162,27 @@ const realApi = {
     const id = await uid()
     const { error } = await supabase.from('message_feedback').insert({ user_id: id, ...f })
     if (error) throw error
+  },
+
+  // ── SHARING ───────────────────────────────────────────────────────
+  // Create (or reuse) a public read-only link token for a conversation.
+  async shareChat(chatId: string): Promise<string> {
+    const id = await uid()
+    const { data: existing } = await supabase.from('shared_chats').select('token').eq('chat_id', chatId).maybeSingle()
+    if (existing?.token) return existing.token as string
+    const token = randomToken()
+    const { error } = await supabase.from('shared_chats').insert({ token, chat_id: chatId, user_id: id })
+    if (error) throw error
+    return token
+  },
+
+  // Public read of a shared conversation by token (no auth required).
+  async getSharedChat(token: string): Promise<SharedConversation | null> {
+    const { data: share } = await supabase.from('shared_chats').select('chat_id').eq('token', token).maybeSingle()
+    if (!share) return null
+    const { data: chat } = await supabase.from('chats').select('title').eq('id', share.chat_id).maybeSingle()
+    const { data: msgs } = await supabase.from('messages').select('*').eq('chat_id', share.chat_id).order('created_at', { ascending: true })
+    return { title: chat?.title ?? 'Shared conversation', messages: (msgs ?? []) as Message[] }
   },
 
   // ── MEMORY (user_memory.fact) ─────────────────────────────────────

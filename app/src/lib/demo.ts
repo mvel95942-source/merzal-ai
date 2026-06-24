@@ -68,6 +68,18 @@ export const demoApi = {
     const key = 'merzal_demo_feedback'
     write(key, [{ id: uuid(), created_at: now(), ...f }, ...read<unknown[]>(key, [])])
   },
+  shareChat: async (chatId: string) => {
+    const token = uuid().replace(/-/g, '').slice(0, 14)
+    const chat = read<Chat[]>(CHATS, []).find((c) => c.id === chatId)
+    const shares = read<Record<string, unknown>>('merzal_demo_shares', {})
+    shares[token] = { title: chat?.title ?? 'Shared conversation', messages: read<Message[]>(MSGS(chatId), []) }
+    write('merzal_demo_shares', shares)
+    return token
+  },
+  getSharedChat: async (token: string) => {
+    const shares = read<Record<string, { title: string; messages: Message[] }>>('merzal_demo_shares', {})
+    return shares[token] ?? null
+  },
 
   listMemory: async (): Promise<MemoryItem[]> => read<MemoryItem[]>(MEMORY, []),
   addMemory: async (fact: string): Promise<MemoryItem> => {

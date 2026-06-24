@@ -9,6 +9,8 @@ import type { PendingAttachment } from '../lib/attachments'
 import type { ChatMode, ConnState, Message } from '../lib/types'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { FeedbackModal } from './FeedbackModal'
+import { ShareSheet } from './ShareSheet'
+import type { ShareTarget } from './ShareSheet'
 import { Logo } from './Logo'
 
 interface Props {
@@ -32,6 +34,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [thinking, setThinking] = useState(false)
   const [draft, setDraft] = useState('') // streamed-but-not-saved assistant text
   const [feedbackFor, setFeedbackFor] = useState<{ m: Message; type: 'up' | 'down' } | null>(null)
+  const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -170,6 +173,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
                 busy={streaming || thinking}
                 onReact={(r) => reactTo(m, r)}
                 onFeedback={(type) => setFeedbackFor({ m, type })}
+                onShare={() => setShareItem({ title: 'Shared from Merzal AI', text: m.content })}
                 onEditSubmit={(text) => regenerate(m, text)}
               />
             ))}
@@ -192,6 +196,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           }}
         />
       )}
+      {shareItem && <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />}
     </main>
   )
 
@@ -211,11 +216,12 @@ function AssistantWrap({ children }: { children: React.ReactNode }) {
   )
 }
 
-function MessageRow({ m, busy, onReact, onFeedback, onEditSubmit }: {
+function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
   m: Message
   busy: boolean
   onReact: (r: 'up' | 'down') => void
   onFeedback: (type: 'up' | 'down') => void
+  onShare: () => void
   onEditSubmit: (text: string) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -264,7 +270,7 @@ function MessageRow({ m, busy, onReact, onFeedback, onEditSubmit }: {
         <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} title="Good response" onClick={() => (m.reaction === 'up' ? onReact('up') : onFeedback('up'))}>👍</button>
         <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}>👎</button>
         <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
-        <button className="act-btn" onClick={() => shareMessage(m.content)}>Share</button>
+        <button className="act-btn" onClick={onShare}>Share</button>
       </div>
     </div>
   )
@@ -275,11 +281,6 @@ function MessageRow({ m, busy, onReact, onFeedback, onEditSubmit }: {
     if (t && t !== m.content) onEditSubmit(t)
   }
   function cancelEdit() { setEditing(false); setDraft(m.content) }
-}
-
-async function shareMessage(text: string) {
-  if (navigator.share) { try { await navigator.share({ text }); return } catch { /* cancelled */ } }
-  navigator.clipboard?.writeText(text)
 }
 
 function miniBtn(primary: boolean): React.CSSProperties {

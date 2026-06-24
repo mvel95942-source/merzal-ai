@@ -59,7 +59,6 @@ async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void)
     base +
     ' Use the conversation so far to stay consistent and remember what the user told you (their name, what they study, preferences).' +
     ' When the user attaches files or images, read them and reference their content directly.' +
-    ' Answer directly; do not include any <thought> reasoning in your reply.' +
     (req.context ? `\n\n${req.context}` : '')
   const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
     method: 'POST',
@@ -106,9 +105,27 @@ function makeThoughtStripper(emit: (t: string) => void) {
   }
 }
 
-function stripThoughtsAll(s: string): string {
-  const out = s.replace(/<thought>[\s\S]*?<\/thought>/g, '').replace(/^\s+/, '').trim()
-  return out || s.trim()
+// Final cleanup of a complete response. Normally Gemma puts the answer AFTER
+// </thought>; occasionally it buries it inside the thought with no trailing
+// text — in that case, recover the final-answer line instead of dumping raw.
+function stripThoughtsAll(raw: string): string {
+  let s = raw
+    .replace(/<thought>[\s\S]*?<\/thought>/g, '') // closed blocks
+    .replace(/<thought>[\s\S]*$/g, '')            // unclosed trailing block
+    .replace(/<\/?thought>/g, '')
+    .replace(/^\s+/, '')
+    .trim()
+  if (s) return s
+  // Answer was inside the thought — pull the last sentence-like line.
+  const inner = raw.replace(/<\/?thought>/g, '')
+  const lines = inner.split('\n')
+    .map((l) => l.trim().replace(/^[*\-•]\s*/, '').replace(/^["“]|["”]$/g, '').trim())
+    .filter(Boolean)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]
+    if (/[.!?]$/.test(l) && l.length > 12 && !/^(user|task|goal|request|constraint|input|output|step|reasoning|analysis)\b[:.]?/i.test(l)) return l
+  }
+  return lines[lines.length - 1] || raw.trim()
 }
 
 async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Promise<string> {
