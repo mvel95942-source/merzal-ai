@@ -15,16 +15,33 @@ export function Login() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  // Surface errors that come back on the invite/magic link (e.g. expired link).
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const desc = hash.get('error_description')
+    if (desc) {
+      setErr(decodeURIComponent(desc).replace(/\+/g, ' '))
+      history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
+
+  function inviteOnly(raw: string): string {
+    // Supabase returns "Signups not allowed for otp" when an email isn't invited.
+    if (/signups? not allowed|not allowed for otp/i.test(raw))
+      return 'That account isn’t invited yet. Ask your campus admin to send you an invite.'
+    return raw
+  }
+
   async function sendCode() {
     setErr(null)
-    if (!value.trim()) return setErr('Enter your university ' + mode)
+    if (!value.trim()) return setErr('Enter your invited ' + mode)
     if (!hasSupabase) return setErr('Supabase not configured — set VITE_SUPABASE_URL.')
     setBusy(true)
     try {
       await api.sendOtp(value.trim(), mode)
       setStage('verify')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not send code')
+      setErr(inviteOnly(e instanceof Error ? e.message : 'Could not send code'))
     } finally {
       setBusy(false)
     }
@@ -94,14 +111,17 @@ export function Login() {
       <div style={{ flex: 1, background: 'var(--paper-panel)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
         <div style={{ width: '100%', maxWidth: 368, animation: 'mz-rise .6s cubic-bezier(.16,1,.3,1) both' }}>
           <h2 className="display" style={{ fontWeight: 400, fontSize: 36, margin: '0 0 5px', letterSpacing: '-.015em', color: '#1a1612' }}>Welcome back</h2>
-          <p style={{ fontSize: 14, color: 'var(--muted)', margin: '0 0 28px' }}>{brand.loginSubtitle}</p>
+          <p style={{ fontSize: 14, color: 'var(--muted)', margin: '0 0 18px' }}>{brand.loginSubtitle}</p>
 
           {stage === 'enter' ? (
             <>
+              <div className="mono" style={{ fontSize: 10.5, letterSpacing: '.06em', color: 'var(--muted)', background: '#efe9dd', borderRadius: 9, padding: '8px 11px', marginBottom: 16 }}>
+                🔒 Invite-only — sign in with the account your campus invited.
+              </div>
               <button onClick={google} style={googleBtn}>
                 <GoogleMark /> Continue with Google
               </button>
-              <Divider label="or use your email" />
+              <Divider label="or use your invited email" />
               <div style={{ display: 'flex', gap: 6, padding: 4, background: '#ece7dd', borderRadius: 11, marginBottom: 18 }}>
                 {(['email', 'phone'] as Mode[]).map((m) => (
                   <button

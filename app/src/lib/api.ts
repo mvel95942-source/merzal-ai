@@ -13,8 +13,13 @@ async function uid(): Promise<string> {
 
 const realApi = {
   // ── AUTH ──────────────────────────────────────────────────────────
+  // Invite-only: shouldCreateUser:false means an OTP is only sent to accounts
+  // that already exist (i.e. were invited from Supabase). Unknown emails/phones
+  // are rejected instead of silently self-registering.
   async sendOtp(identifier: string, mode: 'email' | 'phone') {
-    const opts = mode === 'phone' ? { phone: identifier } : { email: identifier }
+    const opts = mode === 'phone'
+      ? { phone: identifier, options: { shouldCreateUser: false } }
+      : { email: identifier, options: { shouldCreateUser: false } }
     const { error } = await supabase.auth.signInWithOtp(opts)
     if (error) throw error
   },
