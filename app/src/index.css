@@ -45,6 +45,12 @@ button { cursor: pointer; }
 @keyframes mz-fadein { 0% { opacity: 0; transform: translateY(8px) } 100% { opacity: 1; transform: none } }
 @keyframes mz-rise { 0% { opacity: 0; transform: translateY(14px) } 100% { opacity: 1; transform: none } }
 @keyframes mz-spin { to { transform: rotate(360deg) } }
+@keyframes tag-stream {
+  0% { opacity: 0; filter: blur(6px); transform: translateY(4px) }
+  14% { opacity: 1; filter: blur(0); transform: none }
+  82% { opacity: 1; filter: blur(0); transform: none }
+  100% { opacity: 0; filter: blur(4px); transform: translateY(-3px) }
+}
 
 .mz-word { display: inline; animation: mz-word .5s cubic-bezier(.16,1,.3,1) both; }
 .skeleton {

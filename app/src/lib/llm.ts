@@ -1,30 +1,24 @@
-// Pluggable LLM gateway. Default targets an on-prem vLLM / Ollama-compatible
-// OpenAI streaming endpoint. If no endpoint is configured, a built-in stub
-// streams a canned reply so the whole UX is demonstrable offline.
+// LLM gateway client. Calls the Supabase Edge Function `chat`, which holds all
+// provider API keys server-side (keys never reach the browser) and proxies an
+// OpenAI-style SSE stream back. If the gateway is unreachable or no key is
+// configured for the chosen provider, falls back to a built-in stub so the chat
+// UX always works.
+import { supabase, hasSupabase } from './supabase'
 import type { ChatMode, Message } from './types'
 
+// The client never chooses a model. It sends the mode (campus|world) and the
+// edge function maps that to a provider + model from server-side config, so
+// users only ever see the Campus/World toggle.
 export interface LLMRequest {
   mode: ChatMode
   messages: Pick<Message, 'role' | 'content'>[]
-  // Retrieved campus knowledge + persistent memory, injected as grounding.
   context?: string
   signal?: AbortSignal
 }
 
-export interface LLMProvider {
-  stream(req: LLMRequest, onToken: (t: string) => void): Promise<string>
-}
+const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`
 
-const ENDPOINTS: Record<ChatMode, string | undefined> = {
-  campus: import.meta.env.VITE_LLM_CAMPUS_ENDPOINT as string | undefined,
-  world: import.meta.env.VITE_LLM_WORLD_ENDPOINT as string | undefined,
-}
-
-// Parse an OpenAI-style SSE stream (`data: {json}\n\n`, terminated by `[DONE]`).
-async function streamOpenAISSE(
-  res: Response,
-  onToken: (t: string) => void,
-): Promise<string> {
+async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Promise<string> {
   const reader = res.body!.getReader()
   const dec = new TextDecoder()
   let buf = ''
@@ -45,14 +39,10 @@ async function streamOpenAISSE(
         const tok: string =
           json.choices?.[0]?.delta?.content ??
           json.choices?.[0]?.text ??
-          json.response ?? // Ollama native
+          json.response ??
           ''
-        if (tok) {
-          full += tok
-          onToken(tok)
-        }
+        if (tok) { full += tok; onToken(tok) }
       } catch {
-        // Non-JSON chunk (e.g. raw text endpoint) — treat as a token.
         full += payload
         onToken(payload)
       }
@@ -61,65 +51,56 @@ async function streamOpenAISSE(
   return full
 }
 
-class HttpProvider implements LLMProvider {
-  async stream(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
-    const endpoint = ENDPOINTS[req.mode]
-    if (!endpoint) return stubProvider.stream(req, onToken)
-
-    const system =
-      req.mode === 'campus'
-        ? 'You are a private campus assistant running on the university\'s own servers. Ground answers in the provided campus context. Make clear the data is the college\'s own and stays on campus.'
-        : 'You are a helpful assistant.'
-
-    const body = {
-      stream: true,
-      messages: [
-        { role: 'system', content: system + (req.context ? `\n\nContext:\n${req.context}` : '') },
-        ...req.messages.map((m) => ({ role: m.role, content: m.content })),
-      ],
-    }
-
-    const res = await fetch(endpoint, {
+export async function streamChat(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  if (!hasSupabase) return stub(req, onToken)
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    const res = await fetch(FUNCTION_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token ?? import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+      },
+      body: JSON.stringify({
+        mode: req.mode,
+        context: req.context ?? '',
+        messages: req.messages,
+      }),
       signal: req.signal,
     })
-    if (!res.ok || !res.body) throw new Error(`LLM endpoint ${res.status}`)
+    // 501 = provider not configured (no secret). Fall back to the stub.
+    if (res.status === 501) return stub(req, onToken)
+    if (!res.ok || !res.body) throw new Error(`gateway ${res.status}`)
     return streamOpenAISSE(res, onToken)
+  } catch (e) {
+    if (req.signal?.aborted) throw e
+    return stub(req, onToken)
   }
 }
 
-// Canned, context-aware stub so the staged thinking + word-reveal UX works
-// with zero backend. Streams word-by-word at a natural cadence.
-const stubProvider: LLMProvider = {
-  async stream(req, onToken) {
-    const last = req.messages[req.messages.length - 1]?.content ?? ''
-    const reply = cannedReply(last, req.mode)
-    const words = reply.split(/(\s+)/)
-    let full = ''
-    for (const w of words) {
-      if (req.signal?.aborted) break
-      full += w
-      onToken(w)
-      await new Promise((r) => setTimeout(r, 18 + Math.min(60, w.length * 6)))
-    }
-    return full
-  },
+// ── Built-in stub (no backend needed) ────────────────────────────────
+async function stub(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  const last = req.messages[req.messages.length - 1]?.content ?? ''
+  const reply = canned(last, req.mode)
+  let full = ''
+  for (const w of reply.split(/(\s+)/)) {
+    if (req.signal?.aborted) break
+    full += w
+    onToken(w)
+    await new Promise((r) => setTimeout(r, 16 + Math.min(60, w.length * 6)))
+  }
+  return full
 }
 
-function cannedReply(q: string, mode: ChatMode): string {
-  const lower = q.toLowerCase()
-  if (mode === 'campus' && /add\/?drop|deadline/.test(lower)) {
-    return "Add/drop for the spring term closes on Friday, January 31 at 11:59 PM. After that date, dropping a course leaves a “W” on your transcript instead of removing it.\n\nSince you may be in an Engineering program, remember that dropping below 12 credits can affect both your full-time status and any merit aid tied to it. Want me to pull up the official academic calendar?"
-  }
-  if (/financial aid|fafsa|scholarship/.test(lower)) {
-    return 'To apply for financial aid, submit the FAFSA (or your institution\'s aid form) through the financial aid portal. Priority deadlines are usually in early spring. I keep this guidance grounded in your college\'s own published policies, on campus.'
-  }
-  if (/photosynthesis/.test(lower)) {
-    return 'Photosynthesis is how plants turn sunlight, water, and carbon dioxide into glucose and oxygen. The overall equation: 6 CO₂ + 6 H₂O + light → C₆H₁₂O₆ + 6 O₂. Want the light reactions vs. the Calvin cycle broken down?'
-  }
-  return `Here's what I can tell you${mode === 'campus' ? ' from your campus knowledge base' : ''}. This is a private, on-premises preview reply — wire up an LLM endpoint in \`.env.local\` to stream real answers. Your question was: “${q.trim()}”.`
+function canned(q: string, mode: ChatMode): string {
+  const l = q.toLowerCase()
+  if (mode === 'campus' && /add\/?drop|deadline/.test(l))
+    return 'Add/drop for the spring term closes on Friday, January 31 at 11:59 PM. After that, dropping a course leaves a “W” on your transcript. Want me to pull up the official academic calendar?'
+  if (/financial aid|fafsa|scholarship/.test(l))
+    return "To apply for financial aid, submit the FAFSA (or your institution's aid form) through the financial aid portal — priority deadlines are usually early spring."
+  if (/photosynthesis/.test(l))
+    return 'Photosynthesis turns sunlight, water, and CO₂ into glucose and oxygen: 6 CO₂ + 6 H₂O + light → C₆H₁₂O₆ + 6 O₂. Want the light reactions vs. the Calvin cycle?'
+  return `This is a local preview reply — add an API key as a Supabase secret (e.g. OPENAI_API_KEY) and pick a provider to stream real answers. You asked: “${q.trim()}”.`
 }
-
-export const llm: LLMProvider = new HttpProvider()

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
 import { hasSupabase } from '../lib/supabase'
@@ -42,13 +42,13 @@ export function Login() {
     }
   }
 
-  async function sso() {
+  async function google() {
     setErr(null)
-    const domain = value.includes('@') ? value.split('@')[1] : value.trim()
+    if (!hasSupabase) return setErr('Supabase not configured — set VITE_SUPABASE_URL.')
     try {
-      await api.signInWithSSO(domain)
-    } catch {
-      setErr('SSO is not configured for this tenant yet.')
+      await api.signInWithGoogle()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Google sign-in is not enabled yet.')
     }
   }
 
@@ -72,7 +72,7 @@ export function Login() {
           </div>
         </div>
         <div style={{ maxWidth: 480 }}>
-          <div className="mono" style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: '#c47a35', marginBottom: 22, opacity: .85 }}>{brand.loginTags.join(' · ')}</div>
+          <AnimatedTags tags={brand.loginTags} />
           <h1 className="display" style={{ fontWeight: 400, fontSize: 46, lineHeight: 1.08, letterSpacing: '-.02em', margin: '0 0 18px' }}>{brand.loginHeroTitle}</h1>
           <p style={{ fontSize: 16, lineHeight: 1.6, color: '#cabfa9', margin: 0 }}>{brand.loginHeroDesc}</p>
         </div>
@@ -92,6 +92,10 @@ export function Login() {
 
           {stage === 'enter' ? (
             <>
+              <button onClick={google} style={googleBtn}>
+                <GoogleMark /> Continue with Google
+              </button>
+              <Divider label="or use your email" />
               <div style={{ display: 'flex', gap: 6, padding: 4, background: '#ece7dd', borderRadius: 11, marginBottom: 18 }}>
                 {(['email', 'phone'] as Mode[]).map((m) => (
                   <button key={m} onClick={() => setMode(m)} style={tab(mode === m)}>
@@ -99,19 +103,17 @@ export function Login() {
                   </button>
                 ))}
               </div>
-              <label className="mono" style={lbl}>University {mode}</label>
+              <label className="mono" style={lbl}>Your {mode}</label>
               <input
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendCode()}
-                placeholder={mode === 'email' ? 'you@university.edu' : '+1 555 123 4567'}
+                placeholder={mode === 'email' ? 'you@gmail.com' : '+1 555 123 4567'}
                 style={field}
               />
               <button onClick={sendCode} disabled={busy} style={primaryBtn}>
-                {busy ? 'Sending…' : 'Continue'} <span className="mono">→</span>
+                {busy ? 'Sending…' : 'Send code'} <span className="mono">→</span>
               </button>
-              <Divider />
-              <button onClick={sso} style={ssoBtn}>{brand.ssoLabel}</button>
             </>
           ) : (
             <>
@@ -141,10 +143,38 @@ export function Login() {
   )
 }
 
-function Divider() {
+function Divider({ label = 'or' }: { label?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0', color: '#b3ab9d', fontSize: 12 }}>
-      <div style={{ flex: 1, height: 1, background: '#e1dacb' }} />or<div style={{ flex: 1, height: 1, background: '#e1dacb' }} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0', color: '#b3ab9d', fontSize: 12 }}>
+      <div style={{ flex: 1, height: 1, background: '#e1dacb' }} />{label}<div style={{ flex: 1, height: 1, background: '#e1dacb' }} />
+    </div>
+  )
+}
+
+function GoogleMark() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 48 48" style={{ flex: 'none' }}>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8a12 12 0 1 1 7.9-21l5.7-5.7A20 20 0 1 0 24 44c11 0 20-9 20-20 0-1.3-.1-2.3-.4-3.5z" />
+      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.6 5.1A20 20 0 0 0 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C39.9 35.6 44 30.4 44 24c0-1.3-.1-2.3-.4-3.5z" />
+    </svg>
+  )
+}
+
+// The landing tags stream in and out, one at a time — like generated text.
+function AnimatedTags({ tags }: { tags: readonly string[] }) {
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setI((p) => (p + 1) % tags.length), 2200)
+    return () => clearInterval(id)
+  }, [tags.length])
+  return (
+    <div className="mono" style={{ height: 14, marginBottom: 22, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c47a35', animation: 'mz-pulse 1s infinite' }} />
+      <span key={i} style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: '#c47a35', animation: 'tag-stream 2.2s both' }}>
+        {tags[i]}
+      </span>
     </div>
   )
 }
@@ -158,3 +188,4 @@ const lbl: React.CSSProperties = { display: 'block', fontSize: 10, letterSpacing
 const field: React.CSSProperties = { width: '100%', height: 48, border: '1px solid var(--line-strong)', borderRadius: 11, background: '#fff', padding: '0 15px', fontSize: 15, color: 'var(--ink)', outline: 'none', marginBottom: 14 }
 const primaryBtn: React.CSSProperties = { width: '100%', height: 48, border: 'none', borderRadius: 11, background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }
 const ssoBtn: React.CSSProperties = { width: '100%', height: 46, border: '1px solid var(--line-strong)', borderRadius: 11, background: '#fff', color: 'var(--ink)', fontSize: 14, fontWeight: 500 }
+const googleBtn: React.CSSProperties = { width: '100%', height: 48, border: '1px solid var(--line-strong)', borderRadius: 11, background: '#fff', color: 'var(--ink)', fontSize: 14.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
-import { llm } from '../lib/llm'
+import { streamChat } from '../lib/llm'
 import type { ChatMode, ConnState, Message } from '../lib/types'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { Logo } from './Logo'
@@ -66,9 +66,13 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     abortRef.current = ctrl
     let started = false
     try {
-      // TODO(M6/M7): inject retrieved memory + campus RAG chunks as context.
-      const full = await llm.stream(
-        { mode: m, messages: [...messages, userMsg].map((x) => ({ role: x.role, content: x.content })), signal: ctrl.signal },
+      // TODO(RAG): inject retrieved memory + campus knowledge as context.
+      const full = await streamChat(
+        {
+          mode: m,
+          messages: [...messages, userMsg].map((x) => ({ role: x.role, content: x.content })),
+          signal: ctrl.signal,
+        },
         (tok) => {
           if (!started) { started = true; setThinking(false); setStreaming(true) }
           setDraft((d) => d + tok)

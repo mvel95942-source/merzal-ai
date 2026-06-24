@@ -28,6 +28,15 @@ export const api = {
     return data
   },
 
+  async signInWithGoogle() {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    })
+    if (error) throw error
+    return data
+  },
+
   async signInWithSSO(domain: string) {
     // SSO stub: real deploys pass a SAML/OIDC provider configured per tenant.
     const { data, error } = await supabase.auth.signInWithSSO({ domain })

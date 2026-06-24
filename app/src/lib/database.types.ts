@@ -12,12 +12,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      allowed_identities: {
-        Row: { college_id: string; department: string | null; identity: string; role: string; semester: number | null }
-        Insert: { college_id?: string; department?: string | null; identity: string; role?: string; semester?: number | null }
-        Update: { college_id?: string; department?: string | null; identity?: string; role?: string; semester?: number | null }
-        Relationships: []
-      }
       audit_log: {
         Row: { action: string; college_id: string; detail: Json; id: number; ts: string; user_id: string | null }
         Insert: { action: string; college_id?: string; detail?: Json; id?: never; ts?: string; user_id?: string | null }
