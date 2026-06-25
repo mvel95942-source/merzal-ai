@@ -1,47 +1,52 @@
-# Invite-only authentication
+# Authentication — roll number + password
 
-Merzal AI is **invite-only**: only accounts provisioned in Supabase can sign in.
-There is no public self-signup.
+Students sign in with their **campus roll number** and a **password**. There is
+no public sign-up; accounts are provisioned by the campus admin.
 
 ## How it works
 
-- The app calls `signInWithOtp({ shouldCreateUser: false })`, so an OTP/magic
-  link is **only** sent to accounts that already exist. Unknown emails get
-  “That account isn’t invited yet.”
-- `Continue with Google` works for users whose Google email already exists as a
-  Supabase user (enable **Disable signups** in the dashboard to enforce this for
-  OAuth too).
-- A trigger on `auth.users` auto-creates the `user_profiles` row, so an invited
-  user lands on the one-time Setup screen, then the app.
+- Supabase Auth is email-based, so each roll number maps to a stable synthetic
+  email: `<roll>@<VITE_STUDENT_EMAIL_DOMAIN>` (default `students.merzal.local`),
+  lower-cased with spaces/punctuation stripped. See `rollToEmail` in `lib/api.ts`.
+- The login page collects **Roll number + Password** and calls
+  `signInWithPassword`. The app shows the roll number (not the email).
+- First login shows the one-time Setup screen (department/semester); a trigger on
+  `auth.users` auto-creates the profile row.
 
-## Inviting a user (admin)
+## Provisioning students (admin)
 
-**Dashboard:** Authentication → Users → **Invite user** → enter their email.
-Supabase emails them a link; clicking it signs them in (the app picks up the
-session from the URL automatically).
+Create each user with email = `rollToEmail(roll)` and a password, confirmed.
 
 **API / script** (service-role key, server-side only):
 
 ```ts
 import { createClient } from '@supabase/supabase-js'
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
-await admin.auth.admin.inviteUserByEmail('student@college.edu', {
-  redirectTo: 'https://your-app-url',
+
+const DOMAIN = 'students.merzal.local' // must match VITE_STUDENT_EMAIL_DOMAIN
+const rollToEmail = (roll: string) =>
+  `${roll.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '')}@${DOMAIN}`
+
+await admin.auth.admin.createUser({
+  email: rollToEmail('21CS042'),
+  password: 'set-a-strong-temp-password',
+  email_confirm: true,
+  user_metadata: { roll: '21CS042' },
 })
 ```
 
+Bulk: loop over a roster CSV (roll, temp password) and call `createUser` for each.
+
 ## Required dashboard settings
 
-1. **Authentication → Providers → Email**: enable; configure SMTP for reliable
-   delivery (the built-in mailer is rate-limited).
-2. **Authentication → Providers → Google**: add OAuth client ID + secret; add the
-   app origin to redirect URLs.
-3. **Authentication → Sign In / Providers → “Allow new users to sign up”: OFF**
-   (this is what makes Google + OTP truly invite-only).
-4. **URL Configuration → Site URL / Redirect URLs**: include the deployed app
-   origin so invite links return to the app.
+1. **Authentication → Providers → Email**: enabled (password sign-in). SMTP is
+   only needed if you later add password-reset emails.
+2. **Authentication → Sign In / Providers → “Allow new users to sign up”: OFF** —
+   only admin-provisioned roll numbers can sign in.
+3. Set `VITE_STUDENT_EMAIL_DOMAIN` in the frontend env to match the script.
 
-## Phone invites
+## Notes
 
-Phone OTP needs an SMS provider (Twilio/MessageBird) configured in
-Authentication → Providers → Phone. Default country in the UI is India (+91).
+- Password reset: until a self-serve flow exists, the admin resets via
+  `admin.auth.admin.updateUserById(id, { password })`.
+- The `Explore a preview` link uses local demo mode (no account) for evaluation.

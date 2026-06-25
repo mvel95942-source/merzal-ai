@@ -80,6 +80,15 @@ export const demoApi = {
     const shares = read<Record<string, { title: string; messages: Message[] }>>('merzal_demo_shares', {})
     return shares[token] ?? null
   },
+  importSharedChat: async (token: string) => {
+    const shares = read<Record<string, { title: string; messages: Message[] }>>('merzal_demo_shares', {})
+    const s = shares[token]
+    if (!s) return null
+    const chat: Chat = { id: uuid(), title: s.title, bucket: 'Today', pinned: false, updated_at: now() }
+    write(CHATS, [chat, ...read<Chat[]>(CHATS, [])])
+    write(MSGS(chat.id), s.messages.map((m) => ({ ...m, id: uuid(), chat_id: chat.id, user_id: 'demo-user' })))
+    return chat.id
+  },
 
   listMemory: async (): Promise<MemoryItem[]> => read<MemoryItem[]>(MEMORY, []),
   addMemory: async (fact: string): Promise<MemoryItem> => {

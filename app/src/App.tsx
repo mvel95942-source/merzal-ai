@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from './lib/api'
+import { api, emailToRoll } from './lib/api'
 import { hasSupabase } from './lib/supabase'
 import { brand } from './lib/brand'
 import type { Chat, Profile } from './lib/types'
@@ -38,13 +38,21 @@ export default function App() {
   const loadAfterAuth = useCallback(async () => {
     const session = await api.getSession()
     if (!session) { setPhase('login'); return }
-    setAccount(session.user.email ?? session.user.phone ?? 'You')
+    setAccount(emailToRoll(session.user.email) ?? 'You')
     const prof = await api.getProfile()
     setProfile(prof)
     if (!prof || !prof.onboarding_done) { setPhase('setup'); return }
+    // Continue a conversation opened from a share link.
+    let openId = localStorage.getItem('merzal_open_chat')
+    const contTok = localStorage.getItem('merzal_continue_token')
+    if (contTok) {
+      try { const id = await api.importSharedChat(contTok); if (id) openId = id } catch { /* ignore */ }
+      localStorage.removeItem('merzal_continue_token')
+    }
+    localStorage.removeItem('merzal_open_chat')
     const list = await api.listChats()
     setChats(list)
-    setActiveId(list[0]?.id ?? null)
+    setActiveId(openId ?? list[0]?.id ?? null)
     setPhase('app')
   }, [])
 

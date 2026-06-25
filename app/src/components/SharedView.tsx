@@ -8,7 +8,23 @@ import { Logo } from './Logo'
 // Public, read-only conversation viewer reached via #/share/<token>.
 export function SharedView({ token }: { token: string }) {
   const [data, setData] = useState<SharedConversation | null | 'loading'>('loading')
+  const [busy, setBusy] = useState(false)
   useEffect(() => { api.getSharedChat(token).then(setData).catch(() => setData(null)) }, [token])
+
+  // Copy the conversation into the viewer's own account and continue it.
+  async function continueChat() {
+    setBusy(true)
+    try {
+      const session = await api.getSession()
+      if (session) {
+        const id = await api.importSharedChat(token)
+        if (id) localStorage.setItem('merzal_open_chat', id)
+      } else {
+        localStorage.setItem('merzal_continue_token', token) // import right after login
+      }
+    } catch { /* ignore */ }
+    window.location.href = window.location.pathname // back to the app (or login)
+  }
 
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--paper-app)' }}>
@@ -34,7 +50,12 @@ export function SharedView({ token }: { token: string }) {
                 ),
               )}
             </div>
-            <p style={{ marginTop: 40, fontSize: 12, color: 'var(--faint)' }}>Shared from Merzal AI — a private campus assistant.</p>
+            <div style={{ marginTop: 32, padding: '18px 0 0', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+              <button onClick={continueChat} disabled={busy} style={{ height: 44, padding: '0 20px', border: 'none', borderRadius: 12, background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                {busy ? 'Opening…' : 'Continue this chat in your account →'}
+              </button>
+              <p style={{ fontSize: 12, color: 'var(--faint)', margin: 0 }}>This copies the conversation into your account so you can keep chatting. Shared from Merzal AI.</p>
+            </div>
           </>
         )}
       </div>

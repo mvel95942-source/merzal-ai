@@ -15,6 +15,18 @@ const randomToken = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g,
 
 export interface SharedConversation { title: string; messages: Message[] }
 
+// Students sign in with their roll number + password. Supabase Auth is
+// email-based, so we map a roll number to a stable synthetic email. Admins
+// provision accounts with this same email + a password (see AUTH_INVITES.md).
+const STUDENT_DOMAIN = (import.meta.env.VITE_STUDENT_EMAIL_DOMAIN as string) || 'students.merzal.local'
+export function rollToEmail(roll: string): string {
+  return `${roll.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '')}@${STUDENT_DOMAIN}`
+}
+export function emailToRoll(email: string | undefined): string {
+  if (!email) return 'You'
+  return email.endsWith(`@${STUDENT_DOMAIN}`) ? email.slice(0, -`@${STUDENT_DOMAIN}`.length) : email
+}
+
 const realApi = {
   // ── AUTH ──────────────────────────────────────────────────────────
   // Invite-only: shouldCreateUser:false means an OTP is only sent to accounts
@@ -34,6 +46,12 @@ const realApi = {
         ? { phone: identifier, token, type: 'sms' as const }
         : { email: identifier, token, type: 'email' as const }
     const { data, error } = await supabase.auth.verifyOtp(args)
+    if (error) throw error
+    return data
+  },
+
+  async signInWithPassword(roll: string, password: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email: rollToEmail(roll), password })
     if (error) throw error
     return data
   },
@@ -183,6 +201,23 @@ const realApi = {
     const { data: chat } = await supabase.from('chats').select('title').eq('id', share.chat_id).maybeSingle()
     const { data: msgs } = await supabase.from('messages').select('*').eq('chat_id', share.chat_id).order('created_at', { ascending: true })
     return { title: chat?.title ?? 'Shared conversation', messages: (msgs ?? []) as Message[] }
+  },
+
+  // Copy a shared conversation into the signed-in user's account so they can
+  // continue it from their own chat list. Returns the new chat id.
+  async importSharedChat(token: string): Promise<string | null> {
+    const id = await uid()
+    const shared = await this.getSharedChat(token)
+    if (!shared) return null
+    const { data: chat, error } = await supabase
+      .from('chats')
+      .insert({ user_id: id, title: shared.title, bucket: 'Today' })
+      .select('id')
+      .single()
+    if (error) throw error
+    const rows = shared.messages.map((m) => ({ chat_id: chat.id, user_id: id, role: m.role, content: m.content, mode: m.mode ?? null }))
+    if (rows.length) await supabase.from('messages').insert(rows)
+    return chat.id as string
   },
 
   // ── MEMORY (user_memory.fact) ─────────────────────────────────────
