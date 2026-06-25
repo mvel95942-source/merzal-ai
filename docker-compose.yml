@@ -1,0 +1,17 @@
+# Merzal AI — on-prem deploy.
+#   cp .env.docker.example .env  &&  edit  &&  docker compose up -d --build
+# Serves the branded SPA on http://<host>:${WEB_PORT}. Point VITE_SUPABASE_URL at
+# your (self-hosted or cloud) Supabase. The LLM key stays server-side in the
+# Supabase `chat` edge function — it is never built into this image.
+services:
+  web:
+    build:
+      context: ./app
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_STUDENT_EMAIL_DOMAIN: ${VITE_STUDENT_EMAIL_DOMAIN:-students.merzal.local}
+    image: merzal-ai-web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped

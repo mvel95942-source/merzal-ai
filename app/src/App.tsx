@@ -139,7 +139,7 @@ export default function App() {
         </>
       ) : <div style={{ width: 264, flex: 'none' }}>{sidebar}</div>}
 
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <header style={{ height: 54, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 14px', borderBottom: '1px solid var(--line)', background: '#f6f3ecdd', backdropFilter: 'blur(6px)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             {isMobile && (

@@ -162,8 +162,8 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const empty = messages.length === 0 && !thinking && !streaming
 
   return (
-    <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--paper-panel)', height: '100%' }}>
-      <div ref={scrollRef} className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '28px 0', display: empty ? 'flex' : 'block', alignItems: 'center', justifyContent: 'center' }}>
+    <main style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--paper-panel)', height: '100%' }}>
+      <div ref={scrollRef} className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '28px 0', display: empty ? 'flex' : 'block', alignItems: 'center', justifyContent: 'center' }}>
         {empty ? (
           <Hero onPick={(q) => { setInput(q); setTimeout(send, 0) }} disabled={!chatId} />
         ) : (
@@ -315,10 +315,8 @@ function Composer(p: {
   return (
     <div style={{ borderTop: '1px solid var(--line)', background: 'var(--paper-panel)', padding: '12px 0 14px', paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 16px' }}>
-        <ModeToggle mode={p.mode} setMode={p.setMode} />
-
         {p.attachments.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '4px 0 10px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '0 0 8px' }}>
             {p.attachments.map((a) => (
               <div key={a.id} title={a.note ?? a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line-strong)', borderRadius: 10, padding: '6px 8px', background: a.status === 'unsupported' ? '#fbeee6' : '#fff', maxWidth: 220 }}>
                 {a.kind === 'image' && a.dataUrl
@@ -331,36 +329,42 @@ function Composer(p: {
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, border: '1px solid var(--line-strong)', borderRadius: 16, background: '#fff', padding: '6px 6px 6px 8px' }}>
-          <input ref={docRef} type="file" multiple accept={ACCEPT_DOCS} onChange={onInput} style={{ display: 'none' }} />
-          <input ref={imgRef} type="file" multiple accept={ACCEPT_IMAGES} onChange={onInput} style={{ display: 'none' }} />
-          <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onInput} style={{ display: 'none' }} />
-          <div style={{ position: 'relative', flex: 'none' }}>
-            <button title="Add" aria-label="Add" onClick={() => setMenuOpen((v) => !v)} style={{ ...iconBtn, fontSize: 22, color: 'var(--muted)', transform: menuOpen ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }}>＋</button>
-            {menuOpen && (
-              <>
-                <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-                <div style={{ position: 'absolute', bottom: 46, left: 0, zIndex: 31, background: '#fff', border: '1px solid var(--line)', borderRadius: 12, boxShadow: '0 12px 30px -8px #0003', padding: 5, width: 210 }}>
-                  <AddItem icon="🖼️" label="Upload photo" onClick={() => pick(imgRef)} />
-                  <AddItem icon="📄" label="Upload file" onClick={() => pick(docRef)} />
-                  <AddItem icon="📷" label="Take photo" onClick={() => pick(camRef)} />
-                </div>
-              </>
-            )}
-          </div>
+        <input ref={docRef} type="file" multiple accept={ACCEPT_DOCS} onChange={onInput} style={{ display: 'none' }} />
+        <input ref={imgRef} type="file" multiple accept={ACCEPT_IMAGES} onChange={onInput} style={{ display: 'none' }} />
+        <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onInput} style={{ display: 'none' }} />
+
+        {/* Composer card: textarea on top, a Claude-style toolbar (add · mode · send) below */}
+        <div style={{ border: '1px solid var(--line-strong)', borderRadius: 20, background: '#fff', padding: '8px 8px 8px 14px', boxShadow: '0 1px 3px #0000000a' }}>
           <textarea
             value={p.input}
             onChange={(e) => p.setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); p.onSend() } }}
             placeholder={p.conn === 'offline' ? brand.inputPlaceholderOffline : brand.inputPlaceholder}
             rows={1}
-            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', resize: 'none', fontSize: 16, lineHeight: 1.5, maxHeight: 160, background: 'transparent', color: 'var(--ink)', padding: '7px 2px' }}
+            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 16, lineHeight: 1.5, maxHeight: 150, background: 'transparent', color: 'var(--ink)', padding: '6px 2px 2px' }}
           />
-          {p.streaming ? (
-            <button onClick={p.onStop} style={btn('#1d1a16')}>■</button>
-          ) : (
-            <button onClick={p.onSend} style={btn('var(--accent)')}>↑</button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <div style={{ position: 'relative', flex: 'none' }}>
+              <button title="Add" aria-label="Add" onClick={() => setMenuOpen((v) => !v)} style={{ ...iconBtn, fontSize: 22, color: 'var(--muted)', transform: menuOpen ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }}>＋</button>
+              {menuOpen && (
+                <>
+                  <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                  <div style={{ position: 'absolute', bottom: 46, left: 0, zIndex: 31, background: '#fff', border: '1px solid var(--line)', borderRadius: 12, boxShadow: '0 12px 30px -8px #0003', padding: 5, width: 210 }}>
+                    <AddItem icon="🖼️" label="Upload photo" onClick={() => pick(imgRef)} />
+                    <AddItem icon="📄" label="Upload file" onClick={() => pick(docRef)} />
+                    <AddItem icon="📷" label="Take photo" onClick={() => pick(camRef)} />
+                  </div>
+                </>
+              )}
+            </div>
+            <ModePill mode={p.mode} setMode={p.setMode} />
+            <div style={{ flex: 1 }} />
+            {p.streaming ? (
+              <button onClick={p.onStop} style={btn('#1d1a16')}>■</button>
+            ) : (
+              <button onClick={p.onSend} style={btn('var(--accent)')}>↑</button>
+            )}
+          </div>
         </div>
         <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--faint)', margin: '8px 0 0' }}>{brand.disclaimer}</p>
       </div>
@@ -378,14 +382,37 @@ function AddItem({ icon, label, onClick }: { icon: string; label: string; onClic
   )
 }
 
-function ModeToggle({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) => void }) {
+// Claude-style selector living inside the composer: tap to switch Campus/World.
+function ModePill({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) => void }) {
+  const [open, setOpen] = useState(false)
+  const META = {
+    campus: { icon: '🎓', label: 'Campus', desc: 'Knows your campus' },
+    world: { icon: '🌐', label: 'World', desc: 'General knowledge' },
+  } as const
+  const cur = META[mode]
   return (
-    <div style={{ display: 'inline-flex', gap: 4, padding: 3, background: '#ece7dd', borderRadius: 9, marginBottom: 10 }}>
-      {(['campus', 'world'] as ChatMode[]).map((m) => (
-        <button key={m} onClick={() => setMode(m)} className="mono" style={{ height: 28, padding: '0 12px', border: 'none', borderRadius: 7, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', background: mode === m ? '#fff' : 'transparent', color: mode === m ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
-          {m === 'campus' ? 'Campus' : 'World'}
-        </button>
-      ))}
+    <div style={{ position: 'relative', flex: 'none' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 10px', borderRadius: 9, border: '1px solid var(--line-strong)', background: '#faf7f1', color: 'var(--ink-soft)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+        <span style={{ fontSize: 14 }}>{cur.icon}</span>{cur.label}
+        <span style={{ fontSize: 9, opacity: .5 }}>▾</span>
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+          <div style={{ position: 'absolute', bottom: 40, left: 0, zIndex: 31, background: '#fff', border: '1px solid var(--line)', borderRadius: 12, boxShadow: '0 12px 30px -8px #0003', padding: 5, width: 232 }}>
+            {(['campus', 'world'] as ChatMode[]).map((m) => (
+              <button key={m} onClick={() => { setMode(m); setOpen(false) }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', border: 'none', borderRadius: 9, background: mode === m ? '#f1ece1' : 'transparent', textAlign: 'left', cursor: 'pointer' }}>
+                <span style={{ fontSize: 19 }}>{META[m].icon}</span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{META[m].label}</span>
+                  <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>{META[m].desc}</span>
+                </span>
+                {mode === m && <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
