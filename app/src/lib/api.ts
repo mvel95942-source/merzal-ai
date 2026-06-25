@@ -24,7 +24,29 @@ export function rollToEmail(roll: string): string {
 }
 export function emailToRoll(email: string | undefined): string {
   if (!email) return 'You'
-  return email.endsWith(`@${STUDENT_DOMAIN}`) ? email.slice(0, -`@${STUDENT_DOMAIN}`.length) : email
+  // Show just the roll/mobile (local part) for synthetic campus emails.
+  return /@(students|phone)\.merzal\.local$/.test(email) ? email.split('@')[0] : email
+}
+
+// Call the phone-auth edge function (pre-auth, uses the anon key).
+async function phoneAuth(body: Record<string, unknown>): Promise<any> {
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/phone-auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: anon, Authorization: `Bearer ${anon}` },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
+function setPwError(code: string | undefined, detail?: string): string {
+  switch (code) {
+    case 'not_registered': return 'This enrollment number is not registered with your institution.'
+    case 'already_set': return 'A password is already set for this account. Sign in instead.'
+    case 'weak': return detail || 'Pick a stronger password.'
+    case 'provision_failed': return 'Could not set the password. Please try again.'
+    default: return 'Could not set the password.'
+  }
 }
 
 const realApi = {
@@ -54,6 +76,40 @@ const realApi = {
     const { data, error } = await supabase.auth.signInWithPassword({ email: rollToEmail(roll), password })
     if (error) throw error
     return data
+  },
+
+  // ── ENROLLMENT + PASSWORD (with first-login password creation) ────
+  async checkEnrollment(enrollment: string): Promise<{ registered: boolean; hasPassword?: boolean }> {
+    return phoneAuth({ action: 'check', enrollment })
+  },
+
+  async setFirstPassword(enrollment: string, password: string): Promise<void> {
+    const data = await phoneAuth({ action: 'set_password', enrollment, password })
+    if (!data.ok) throw new Error(setPwError(data.error, data.detail))
+    // Sign in straight away with the freshly-created password.
+    const { error } = await supabase.auth.signInWithPassword({ email: data.email, password })
+    if (error) throw error
+  },
+
+  // ── ADMIN: student roster import ──────────────────────────────────
+  async importStudents(rows: { name: string; mobile: string }[]): Promise<number> {
+    const seen = new Set<string>()
+    const clean = rows
+      .map((r) => ({ name: (r.name || '').trim(), mobile: (r.mobile || '').replace(/\D/g, '') }))
+      .filter((r) => r.name && r.mobile.length >= 6 && !seen.has(r.mobile) && seen.add(r.mobile))
+    if (!clean.length) return 0
+    // `students` isn't in the generated DB types yet — cast for these admin calls.
+    const { error } = await (supabase as any).from('students').upsert(
+      clean.map((r) => ({ name: r.name, mobile: r.mobile, status: 'pending_profile' })),
+      { onConflict: 'mobile', ignoreDuplicates: true },
+    )
+    if (error) throw error
+    return clean.length
+  },
+
+  async listStudents(): Promise<{ id: string; name: string; mobile: string; status: string }[]> {
+    const { data } = await (supabase as any).from('students').select('id,name,mobile,status').order('created_at', { ascending: false })
+    return (data ?? []) as { id: string; name: string; mobile: string; status: string }[]
   },
 
   async signInWithGoogle() {

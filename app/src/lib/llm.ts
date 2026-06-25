@@ -142,7 +142,10 @@ async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Pro
 }
 
 export async function streamChat(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
-  if (isDemo()) return streamGeminiDirect(req, onToken)
+  // If a Gemini/Gemma key is configured, answer directly (works for both preview
+  // and signed-in accounts). The edge-function gateway is used only when no
+  // browser key is set (production with provider secrets).
+  if (isDemo() || GEMINI_KEY) return streamGeminiDirect(req, onToken)
   if (!hasSupabase) return stub(req, onToken)
   try {
     const { data } = await supabase.auth.getSession()

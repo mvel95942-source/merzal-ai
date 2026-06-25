@@ -9,6 +9,7 @@ import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { Settings } from './components/Settings'
 import { SharedView } from './components/SharedView'
+import { AdminImport } from './components/AdminImport'
 import { ShareSheet } from './components/ShareSheet'
 import type { ShareTarget } from './components/ShareSheet'
 import { exportPdf, exportText } from './lib/export'
@@ -27,13 +28,19 @@ export default function App() {
   const [queued, setQueued] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
+  const [hash, setHash] = useState(typeof window !== 'undefined' ? window.location.hash : '')
   const conn = useConnection()
   const isMobile = useIsMobile()
 
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
   // Public read-only share route: #/share/<token> — no auth required.
-  const shareToken = typeof window !== 'undefined' && window.location.hash.startsWith('#/share/')
-    ? window.location.hash.slice('#/share/'.length)
-    : null
+  const shareToken = hash.startsWith('#/share/') ? hash.slice('#/share/'.length) : null
+  const adminRoute = hash === '#/admin'
 
   const loadAfterAuth = useCallback(async () => {
     const session = await api.getSession()
@@ -82,6 +89,7 @@ export default function App() {
   }
 
   if (shareToken) return <SharedView token={shareToken} />
+  if (adminRoute && phase === 'app' && profile?.role === 'admin') return <AdminImport onClose={() => { window.location.hash = '' }} />
 
   if (phase === 'loading') {
     return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)' }} className="mono">Loading {brand.name}…</div>

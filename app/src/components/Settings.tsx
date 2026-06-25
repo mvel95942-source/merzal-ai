@@ -75,6 +75,9 @@ export function Settings({ profile, onClose, onSignOut, onProfile }: {
         </Section>
 
         <Section title="Account">
+          {profile?.role === 'admin' && (
+            <button onClick={() => { window.location.hash = '#/admin'; onClose() }} style={{ ...ghost, marginBottom: 8 }}>🛠 Admin · Manage students</button>
+          )}
           <button onClick={onSignOut} style={ghost}>Sign out</button>
           <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 16, lineHeight: 1.5 }}>{brand.loginFooter}</p>
         </Section>
