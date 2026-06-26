@@ -87,6 +87,12 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     const ctrl = new AbortController()
     abortRef.current = ctrl
     let started = false
+    // Coalesce token bursts into one render per animation frame. The model can
+    // emit dozens of tokens per second; without this each one triggers a full
+    // WordReveal re-render and the UI feels slower than the stream actually is.
+    let pending = ''
+    let scheduled = false
+    const flush = () => { scheduled = false; if (pending) { const buf = pending; pending = ''; setDraft((d) => d + buf) } }
     try {
       const lastUser = [...history].reverse().find((x) => x.role === 'user')?.content ?? ''
       const [mem, know] = await Promise.all([memoryContext(), knowledgeFor(m).retrieve(lastUser, m)])
@@ -101,9 +107,11 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
         },
         (tok) => {
           if (!started) { started = true; setThinking(false); setStreaming(true) }
-          setDraft((d) => d + tok)
+          pending += tok
+          if (!scheduled) { scheduled = true; requestAnimationFrame(flush) }
         },
       )
+      flush() // drain anything queued for the next frame
       const saved = await api.addMessage({ chat_id: chatId, role: 'assistant', content: full, mode: m })
       setMessages((prev) => [...prev, saved])
       await api.touchChat(chatId)

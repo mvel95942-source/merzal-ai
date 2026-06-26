@@ -10,7 +10,9 @@ import type { ChatMode, Message } from './types'
 // Preview mode: call the Gemini/Gemma OpenAI-compatible endpoint directly from
 // the browser (key in VITE_GEMINI_API_KEY). Dev-only.
 const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
-const GEMINI_MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.0-flash'
+// Comma-separated fallback list. On 429/500/upstream error we try the next.
+const GEMINI_MODELS = ((import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.5-flash,gemini-2.0-flash')
+  .split(',').map((s) => s.trim()).filter(Boolean)
 
 // An uploaded file/image attached to the latest user turn.
 export interface Attachment {
@@ -61,15 +63,28 @@ async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void)
     ' Use the conversation so far to stay consistent and remember what the user told you (their name, what they study, preferences).' +
     ' When the user attaches files or images, read them and reference their content directly.' +
     (req.context ? `\n\n${req.context}` : '')
-  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GEMINI_KEY}` },
-    body: JSON.stringify({ model: GEMINI_MODEL, stream: true, messages: buildMessages(req, system) }),
-    signal: req.signal,
-  })
-  if (res.status === 429) return note(req, onToken, 'The model is rate-limited right now (free-tier quota). Wait a moment and try again, or use a key with billing enabled.')
-  if (!res.ok || !res.body) return note(req, onToken, `The model returned an error (${res.status}). Check the API key / model in .env.local.`)
-  return streamOpenAISSE(res, onToken)
+  // Try each model in order; fall through on 429 (quota) or 5xx (transient).
+  let lastStatus = 0
+  for (const model of GEMINI_MODELS) {
+    if (req.signal?.aborted) throw new Error('aborted')
+    let res: Response
+    try {
+      res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GEMINI_KEY}` },
+        body: JSON.stringify({ model, stream: true, messages: buildMessages(req, system) }),
+        signal: req.signal,
+      })
+    } catch { lastStatus = 0; continue }
+    if (res.ok && res.body) return streamOpenAISSE(res, onToken)
+    lastStatus = res.status
+    if (res.status === 429 || res.status >= 500) continue // fall through to next model
+    return note(req, onToken, `The model returned an error (${res.status}). Check the API key / model in .env.local.`)
+  }
+  return note(req, onToken,
+    lastStatus === 429
+      ? 'All configured models are rate-limited (free-tier quota). Wait a moment and try again, or use a key with billing enabled.'
+      : `All configured models failed (${lastStatus}). Try again in a moment.`)
 }
 
 // Gemma 4 emits <thought>…</thought> reasoning in its output. Strip it from the
