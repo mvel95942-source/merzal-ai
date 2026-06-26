@@ -1,63 +1,122 @@
-# Merzal AI — Campus AI
+# Merzal AI
 
-A private, white-label AI chat assistant for colleges and schools. Anyone signs
-in with **Google or any email**, then chats with a streaming assistant that has
-a **Campus** mode (institution-aware) and a **World** mode (general). The model
-behind each mode is a backend decision — users never see or pick a model.
+A private, white-label AI assistant for **colleges and schools**. Mobile-first,
+invite-only, streaming chat with two modes:
 
-> MVP scope: **open sign-up, no approval**, plain chat (no RAG yet), single
-> college. The pieces for RAG, multi-tenant, and on-prem are scaffolded but off.
+- **Campus** — answers grounded in admin-uploaded campus knowledge (career
+  guidance, policies, deadlines). PageIndex/GraphRAG drops in here next.
+- **World** — general assistant.
 
-## Layout
+The model behind both modes is a server-side decision — users never pick it.
+
+### 🌐 Live demo
+
+**[merzal-ai.vercel.app](https://merzal-ai.vercel.app)** — sign in with
+enrollment `975116` / password `975116` (seed super admin).
+
+---
+
+## What's in the box
+
+| Feature | Where |
+|---|---|
+| Enrollment + password auth, **first-login password create** | `phone-auth` edge function, `Login.tsx` |
+| Super admin panel — manual add, bulk Excel/CSV import, Supabase-style delete-with-confirmation, career-guidance markdown | `AdminImport.tsx` |
+| Streaming Markdown + LaTeX chat with edit/regenerate, copy, share, thumbs ± with DB-backed feedback | `ChatView.tsx`, `Markdown.tsx` |
+| Conversation memory (session) + persistent per-user memory | `memory.ts` |
+| Public share links with **"Continue in your account"** | `SharedView.tsx`, `ShareSheet.tsx` |
+| File / image / camera upload, real Gemini vision | `attachments.ts` |
+| Campus / World mode pill inside the composer (Claude-style) | `ChatView.tsx` |
+| Per-mode model fallback chain (Gemma 4 31B → Gemini 2.5 Flash → 2.0 Flash) | `chat` edge function |
+| White-label rebrand — one file, three override levels (defaults / env / runtime JSON) | `lib/brand.ts`, `REBRAND.md` |
+| College / School / Open audience flag drives onboarding | `Setup.tsx` |
+| Per-tenant deploy in one command | `infra/bootstrap.sh` |
+| Docker multi-tenant, Vercel one-click | `app/Dockerfile`, `infra/docker-compose.tenants.yml`, `vercel.json` |
+
+---
+
+## Repo layout
 
 ```
-app/                      React + TypeScript + Vite frontend
-  src/lib/                brand/tokens, supabase client, data layer, llm client
-  src/components/         Login, Setup, Sidebar, ChatView, Settings, …
-supabase/functions/chat/  LLM gateway edge function (provider keys server-side)
-Merzal AI.dc.html         design source of truth (mockup)
-ARCHITECTURE.md           system design   ·   SECURITY.md   audit + model
-DEPLOY_CHECKLIST.md       pre-ship gate    ·   INCIDENT_RESPONSE.md  runbook
+app/                       React + TypeScript + Vite frontend
+  src/lib/brand.ts         ← rebrand source of truth (see REBRAND.md)
+  src/lib/                 supabase, llm, memory, knowledge, attachments
+  src/components/          Login, Setup, ChatView, Sidebar, Admin*, Shared*
+supabase/functions/
+  chat/                    LLM gateway (provider keys server-side)
+  phone-auth/              enrollment + password auth, admin user mgmt
+infra/                     production deploy — schema, bootstrap, brands, compose
+  schema.sql               full DB bootstrap for a fresh tenant (idempotent)
+  bootstrap.sh             schema → deploy fns → seed admin (one command)
+  seed_admin.sql           first super admin
+  brands/                  runtime brand JSON examples
+  docker-compose.tenants.yml
+vercel.json                Vercel hosting config
+_legacy/                   original prototype mockup + dc-runtime (kept for reference)
+_backups/                  timestamped snapshots of the prototype
 ```
 
-## Run it locally
+### Docs map
+
+- **[REBRAND.md](REBRAND.md)** — ship a new college/school in one command
+- **[AUTH_FLOW.md](AUTH_FLOW.md)** — login + roster, single source of truth
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design
+- **[SECURITY.md](SECURITY.md)** — model + audit
+- **[DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md)** — pre-ship gate
+- **[INCIDENT_RESPONSE.md](INCIDENT_RESPONSE.md)** — runbook
+- **[NEXT_SESSION_PLAN.md](NEXT_SESSION_PLAN.md)** — what's queued
+
+---
+
+## Run locally
 
 ```bash
-cd app
-npm install
-cp .env.example .env.local   # fill in Supabase URL + anon key (already set for the MVP project)
-npm run dev                  # http://localhost:5173
+cd app && npm install
+cp .env.example .env.local        # fill Supabase URL + anon (or use the live project)
+npm run dev                       # http://localhost:5173
 ```
 
-With no LLM key configured the chat streams a **built-in stub** so the full UX
-works offline. Add a provider key (below) to stream real answers.
+No LLM key locally → built-in stub streams a canned reply. Add
+`VITE_GEMINI_API_KEY=…` to `.env.local` for real answers in dev.
 
-## Plug-and-play: pick the model (backend only)
+---
 
-Keys live as **Supabase secrets** — never in the browser. The `chat` edge
-function maps each mode to a provider + model:
+## Ship a new tenant (10 minutes)
 
 ```bash
-# Per-mode routing (defaults: openai / gpt-4o-mini)
-supabase secrets set CAMPUS_PROVIDER=openai   CAMPUS_MODEL=gpt-4o-mini
-supabase secrets set WORLD_PROVIDER=deepseek  WORLD_MODEL=deepseek-chat
+# 1. Backend — one isolated Supabase project per college
+export SUPABASE_DB_URL="postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres"
+export SUPABASE_PROJECT_REF="<ref>"
+export ADMIN_ENROLLMENT="975116" ADMIN_PASSWORD="change-me"
+bash infra/bootstrap.sh
 
-# Provider credentials — set the ones you use
-supabase secrets set OPENAI_API_KEY=sk-...
-supabase secrets set DEEPSEEK_API_KEY=...
-supabase secrets set GEMINI_API_KEY=...
-supabase secrets set OPENROUTER_API_KEY=...
-supabase secrets set LITELLM_BASE_URL=https://your-litellm  LITELLM_API_KEY=...
-supabase secrets set VLLM_BASE_URL=http://your-vllm:8000/v1   # on-prem
+# 2. Frontend — branded build, deployed to Vercel/Docker/your host
+npx vercel deploy --prod           # uses app/.env.production
+# OR
+docker build -t merzal-<tenant> \
+  --build-arg VITE_SUPABASE_URL=https://<ref>.supabase.co \
+  --build-arg VITE_SUPABASE_ANON_KEY=<anon-key> \
+  --build-arg VITE_BRAND_NAME="Riverside University AI" \
+  --build-arg VITE_BRAND_ACCENT="#2f6f5e" \
+  --build-arg VITE_AUDIENCE=college \
+  ./app
 ```
 
-Supported providers (all OpenAI-compatible, switchable by changing a secret):
-**OpenAI · DeepSeek · Gemini · OpenRouter · LiteLLM · vLLM/Ollama**. To switch
-the model the whole app uses, change `CAMPUS_PROVIDER`/`CAMPUS_MODEL` — no code,
-no redeploy of the frontend.
+See **[REBRAND.md](REBRAND.md)** for the full walkthrough and multi-tenant
+examples.
 
-## Enable Google sign-in
+---
 
-In Supabase → Authentication → Providers → Google: add your Google OAuth client
-ID + secret, and add the app origin to redirect URLs. Email OTP works out of the
-box. See [DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md).
+## LLM provider switching (no frontend change)
+
+Set Supabase secrets — the `chat` edge function reads them and routes:
+
+```bash
+supabase secrets set GEMINI_API_KEY=... CAMPUS_PROVIDER=gemini WORLD_PROVIDER=gemini \
+  CAMPUS_MODEL=gemma-4-31b-it,gemini-2.5-flash WORLD_MODEL=gemma-4-31b-it,gemini-2.5-flash \
+  --project-ref <ref>
+```
+
+`CAMPUS_MODEL`/`WORLD_MODEL` can be a comma-separated fallback chain — the gateway
+tries each on 429/5xx. Supported: OpenAI, DeepSeek, Gemini/Gemma, OpenRouter,
+LiteLLM, vLLM/Ollama (on-prem).

@@ -64,7 +64,7 @@ export function Login() {
   function back() { setStage('enrollment'); setPassword(''); setConfirm(''); setErr(null); setInfo(null) }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', background: '#1d1a16' }}>
+    <div className="login-shell" style={{ minHeight: '100vh', display: 'flex', background: '#1d1a16' }}>
       {/* Hero */}
       <div
         style={{
