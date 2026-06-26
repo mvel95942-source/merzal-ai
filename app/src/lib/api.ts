@@ -28,12 +28,19 @@ export function emailToRoll(email: string | undefined): string {
   return /@(students|phone)\.merzal\.local$/.test(email) ? email.split('@')[0] : email
 }
 
-// Call the phone-auth edge function (pre-auth, uses the anon key).
+// Call the phone-auth edge function. Public actions (check/set_password) work
+// with the anon key; admin actions are gated by the signed-in user's JWT.
 async function phoneAuth(body: Record<string, unknown>): Promise<any> {
   const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+  const isAdmin = String(body.action ?? '').startsWith('admin_')
+  let bearer = anon
+  if (isAdmin) {
+    const { data } = await supabase.auth.getSession()
+    if (data.session?.access_token) bearer = data.session.access_token
+  }
   const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/phone-auth`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: anon, Authorization: `Bearer ${anon}` },
+    headers: { 'Content-Type': 'application/json', apikey: anon, Authorization: `Bearer ${bearer}` },
     body: JSON.stringify(body),
   })
   return res.json()
@@ -110,6 +117,44 @@ const realApi = {
   async listStudents(): Promise<{ id: string; name: string; mobile: string; status: string }[]> {
     const { data } = await (supabase as any).from('students').select('id,name,mobile,status').order('created_at', { ascending: false })
     return (data ?? []) as { id: string; name: string; mobile: string; status: string }[]
+  },
+
+  async addStudent(name: string, enrollment: string): Promise<void> {
+    const r = await phoneAuth({ action: 'admin_add', name, enrollment })
+    if (!r.ok) {
+      if (r.error === 'already_exists') throw new Error('A student with that enrollment already exists.')
+      if (r.error === 'name_required') throw new Error('Name is required.')
+      if (r.error === 'enrollment_required') throw new Error('Enrollment number is required.')
+      if (r.error === 'forbidden') throw new Error('Only admins can add students.')
+      throw new Error(r.detail || 'Could not add student.')
+    }
+  },
+
+  async deleteStudent(enrollment: string, confirm: string): Promise<void> {
+    const r = await phoneAuth({ action: 'admin_delete', enrollment, confirm })
+    if (!r.ok) {
+      if (r.error === 'confirmation_mismatch') throw new Error('Enrollment confirmation did not match.')
+      if (r.error === 'not_found') throw new Error('Student not found.')
+      if (r.error === 'forbidden') throw new Error('Only admins can delete students.')
+      throw new Error(r.detail || 'Could not delete student.')
+    }
+  },
+
+  async getCareerGuide(): Promise<{ id: string; title: string; content: string } | null> {
+    const { data } = await (supabase as any).from('campus_knowledge').select('id,title,content').limit(1).maybeSingle()
+    return data ?? null
+  },
+
+  async saveCareerGuide(title: string, content: string): Promise<void> {
+    const me = await uid()
+    const cur = await this.getCareerGuide()
+    if (cur) {
+      const { error } = await (supabase as any).from('campus_knowledge').update({ title, content, updated_at: new Date().toISOString(), updated_by: me }).eq('id', cur.id)
+      if (error) throw error
+    } else {
+      const { error } = await (supabase as any).from('campus_knowledge').insert({ title, content, updated_by: me })
+      if (error) throw error
+    }
   },
 
   async signInWithGoogle() {
