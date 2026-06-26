@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd app && npm install",
+  "buildCommand": "cd app && VITE_SUPABASE_URL=https://khjzoboeshgtymijzcaf.supabase.co VITE_SUPABASE_ANON_KEY=sb_publishable_soHegVbA7TCZ-ivucBg9ag_syAr78Oh VITE_STUDENT_EMAIL_DOMAIN=students.merzal.local VITE_GEMINI_MODEL=gemini-2.5-flash,gemini-2.0-flash,gemma-4-31b-it npm run build",
+  "outputDirectory": "app/dist",
+  "framework": null,
+  "rewrites": [
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
+}
