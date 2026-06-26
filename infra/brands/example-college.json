@@ -1,0 +1,26 @@
+{
+  "name": "Riverside University AI",
+  "shortName": "Riverside AI",
+  "institution": "Riverside University",
+  "logoLetter": "R",
+  "accent": "#2f6f5e",
+  "audience": "college",
+  "loginBadge": "Campus AI · Riverside University",
+  "loginHeroTitle": "The AI that actually knows Riverside.",
+  "loginHeroDesc": "A private assistant built for Riverside University — running on the university's own infrastructure. Your data never leaves campus.",
+  "loginSubtitle": "Sign in with your Riverside enrollment number.",
+  "loginFooter": "Hosted on-premises · Riverside University · FERPA-compliant.",
+  "sidebarSub": "Riverside · On-premises",
+  "aiName": "Riverside AI",
+  "inputPlaceholder": "Message Riverside AI…",
+  "emptyTitle": "How can I help at Riverside?",
+  "emptyDesc": "Ask about courses, deadlines, financial aid, or campus life — private and on-campus.",
+  "departments": ["Computer Science", "Engineering", "Business", "Arts & Sciences", "Law", "Medicine"],
+  "semesters": [1, 2, 3, 4, 5, 6, 7, 8],
+  "prompts": [
+    "When is the add/drop deadline this term?",
+    "How do I apply for financial aid?",
+    "Find my advisor's office hours",
+    "What's open on campus right now?"
+  ]
+}

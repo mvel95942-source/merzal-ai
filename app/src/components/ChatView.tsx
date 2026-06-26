@@ -429,7 +429,7 @@ function Hero({ onPick, disabled }: { onPick: (q: string) => void; disabled?: bo
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', width: '100%', padding: '0 24px', textAlign: 'center' }}>
       <div style={{ display: 'flex', justifyContent: 'center' }}><Logo size={52} /></div>
-      <h1 className="display" style={{ fontWeight: 400, fontSize: 38, letterSpacing: '-.02em', margin: '20px 0 10px' }}>How can I help on campus?</h1>
+      <h1 className="display" style={{ fontWeight: 400, fontSize: 38, letterSpacing: '-.02em', margin: '20px 0 10px' }}>{brand.emptyTitle}</h1>
       <p style={{ fontSize: 15, color: 'var(--muted)', margin: '0 0 28px', lineHeight: 1.5 }}>{brand.emptyDesc}</p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {brand.prompts.map((q) => (

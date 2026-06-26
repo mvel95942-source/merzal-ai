@@ -1,22 +1,48 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
 import { Logo } from './Logo'
 
+// One-time onboarding, shaped by brand.audience:
+//   college → Department + Semester
+//   school  → Class + Section   (stored as "<Class> · <Section>" in department)
+//   open    → skipped entirely (auto-completes, no screen)
 export function Setup({ onDone }: { onDone: () => void }) {
-  const [dept, setDept] = useState<string>(brand.departments[0])
-  const [sem, setSem] = useState<number>(brand.semesters[0])
+  const isSchool = brand.audience === 'school'
+  const [field1, setField1] = useState<string>(isSchool ? brand.classes[0] : brand.departments[0])
+  const [field2, setField2] = useState<string>(isSchool ? brand.sections[0] : String(brand.semesters[0]))
   const [busy, setBusy] = useState(false)
+
+  // 'open' audience: no questions — mark done and continue.
+  useEffect(() => {
+    if (brand.audience === 'open') {
+      api.upsertProfile({ onboarding_done: true }).finally(onDone)
+    }
+  }, [onDone])
+
+  if (brand.audience === 'open') {
+    return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#1d1a16', color: '#cabfa9' }} className="mono">Getting things ready…</div>
+  }
 
   async function save() {
     setBusy(true)
     try {
-      await api.upsertProfile({ department: dept, semester: sem, onboarding_done: true })
+      if (isSchool) {
+        await api.upsertProfile({ department: `${field1} · ${field2}`, onboarding_done: true })
+      } else {
+        await api.upsertProfile({ department: field1, semester: Number(field2), onboarding_done: true })
+      }
       onDone()
     } finally {
       setBusy(false)
     }
   }
+
+  const f1Label = isSchool ? 'Class' : 'Department'
+  const f2Label = isSchool ? 'Section' : 'Semester'
+  const f1Options = isSchool ? brand.classes : brand.departments
+  const f2Options = isSchool ? brand.sections : brand.semesters.map(String)
+  const f2Render = (v: string) => (isSchool ? `Section ${v}` : `Semester ${v}`)
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1d1a16', padding: 32 }}>
@@ -30,16 +56,16 @@ export function Setup({ onDone }: { onDone: () => void }) {
         </div>
 
         <h2 className="display" style={{ fontWeight: 400, fontSize: 32, margin: '0 0 6px', letterSpacing: '-.015em', color: '#1a1612' }}>Tell us about yourself</h2>
-        <p style={{ fontSize: 14, color: 'var(--muted)', margin: '0 0 28px', lineHeight: 1.5 }}>So Merzal can give you the most relevant answers for your department and semester.</p>
+        <p style={{ fontSize: 14, color: 'var(--muted)', margin: '0 0 28px', lineHeight: 1.5 }}>So {brand.shortName} can give you the most relevant answers for your {f1Label.toLowerCase()} and {f2Label.toLowerCase()}.</p>
 
-        <label className="mono" style={lbl}>Department</label>
-        <select value={dept} onChange={(e) => setDept(e.target.value)} style={select}>
-          {brand.departments.map((d) => <option key={d} value={d}>{d}</option>)}
+        <label className="mono" style={lbl}>{f1Label}</label>
+        <select value={field1} onChange={(e) => setField1(e.target.value)} style={select}>
+          {f1Options.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
 
-        <label className="mono" style={lbl}>Semester</label>
-        <select value={sem} onChange={(e) => setSem(Number(e.target.value))} style={{ ...select, marginBottom: 28 }}>
-          {brand.semesters.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+        <label className="mono" style={lbl}>{f2Label}</label>
+        <select value={field2} onChange={(e) => setField2(e.target.value)} style={{ ...select, marginBottom: 28 }}>
+          {f2Options.map((s) => <option key={s} value={s}>{f2Render(s)}</option>)}
         </select>
 
         <button onClick={save} disabled={busy} style={{ width: '100%', height: 48, border: 'none', borderRadius: 11, background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>

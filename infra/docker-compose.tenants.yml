@@ -1,0 +1,37 @@
+# Per-tenant deploy — one web container per college/school, each pointed at its
+# OWN Supabase project so data is fully isolated (FERPA). Same code, different env.
+#
+#   cd infra && docker compose -f docker-compose.tenants.yml up -d --build
+#
+# Each tenant gets its own brand (build args) and its own Supabase backend.
+# Put a reverse proxy (Caddy/Traefik/nginx) in front to map subdomains → ports.
+services:
+  riverside:
+    build:
+      context: ../app
+      args:
+        VITE_SUPABASE_URL: ${RIVERSIDE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${RIVERSIDE_SUPABASE_ANON_KEY}
+        VITE_STUDENT_EMAIL_DOMAIN: students.riverside.edu
+        VITE_BRAND_NAME: Riverside University AI
+        VITE_BRAND_ACCENT: "#2f6f5e"
+        VITE_AUDIENCE: college
+        # Or serve a full brand JSON at runtime instead of individual args:
+        # VITE_BRAND_JSON_URL: https://riverside.merzal.ai/brand.json
+    image: merzal-riverside
+    ports: ["8081:80"]
+    restart: unless-stopped
+
+  greenwood:
+    build:
+      context: ../app
+      args:
+        VITE_SUPABASE_URL: ${GREENWOOD_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${GREENWOOD_SUPABASE_ANON_KEY}
+        VITE_STUDENT_EMAIL_DOMAIN: students.greenwood.sch
+        VITE_BRAND_NAME: Greenwood High AI
+        VITE_BRAND_ACCENT: "#3a6ea5"
+        VITE_AUDIENCE: school
+    image: merzal-greenwood
+    ports: ["8082:80"]
+    restart: unless-stopped
