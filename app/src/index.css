@@ -65,12 +65,62 @@ button { cursor: pointer; }
 .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; margin: 10px 0; }
 .md hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
 
-/* Mobile-first: collapse the login split to the form only on phones. The
-   .login-shell rule swaps the outer dark bg to cream so no dark band ever shows
-   through if the form pane's flex sizing is off on any device. */
+/* Mobile login: show the product story first, then the sign-in form. */
 @media (max-width: 760px) {
-  .hero-pane { display: none !important; }
-  .login-shell { background: var(--paper-panel) !important; }
+  .login-shell {
+    min-height: 100dvh !important;
+    width: 100% !important;
+    flex-direction: column !important;
+    background: var(--paper-panel) !important;
+    overflow-x: hidden !important;
+  }
+
+  .hero-pane {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 46dvh !important;
+    flex: none !important;
+    padding: 28px 22px 26px !important;
+    gap: 34px !important;
+  }
+
+  .hero-pane h1 {
+    font-size: 32px !important;
+    line-height: 1.08 !important;
+    margin-bottom: 14px !important;
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .hero-pane p {
+    font-size: 14.5px !important;
+    line-height: 1.55 !important;
+    max-width: 100% !important;
+  }
+
+  .hero-pane > .mono:last-of-type {
+    flex-wrap: wrap !important;
+    row-gap: 6px !important;
+    line-height: 1.5 !important;
+  }
+
+  .hero-pane > div {
+    max-width: calc(100vw - 44px) !important;
+  }
+
+  .login-form-pane {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+    align-items: flex-start !important;
+    padding: 28px 22px 34px !important;
+  }
+
+  .login-form-pane > div {
+    width: 100% !important;
+    max-width: calc(100vw - 44px) !important;
+  }
 }
 
 @keyframes tag-stream {
@@ -81,6 +131,9 @@ button { cursor: pointer; }
 }
 
 .mz-word { display: inline; animation: mz-word .18s ease-out both; }
+/* Streaming answer: live markdown + a blinking caret at the tail. */
+.mz-streaming > .md { display: inline; }
+.mz-cursor { display: inline-block; width: 7px; height: 15px; background: var(--accent); margin-left: 2px; vertical-align: text-bottom; border-radius: 1px; animation: mz-pulse .8s infinite; }
 .skeleton {
   background: linear-gradient(90deg, #e9e2d4 25%, #f2ecdf 37%, #e9e2d4 63%);
   background-size: 420px 100%;

@@ -46,9 +46,12 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     api.listMessages(chatId).then(setMessages)
   }, [chatId])
 
+  // Scroll only when a turn starts (user message / thinking) or the final
+  // answer lands — NOT on every streamed token. Lets the reader follow the
+  // answer undisturbed while it generates.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, draft, thinking])
+  }, [messages, thinking])
 
   // Flush offline queue when back online.
   useEffect(() => {
@@ -298,12 +301,15 @@ function miniBtn(primary: boolean): React.CSSProperties {
 }
 
 // Word-by-word blur-to-sharp reveal of the streamed text.
+// Live-rendered streaming: Markdown + LaTeX render AS the text arrives, so bold,
+// lists, and $…$ / $$…$$ math become structured immediately rather than after
+// the whole answer finishes. Incomplete math stays literal until its closing
+// delimiter streams in, then snaps into rendered form.
 function WordReveal({ text }: { text: string }) {
-  const words = text.split(/(\s+)/)
   return (
-    <div style={{ fontSize: 14.5, lineHeight: 1.62, color: 'var(--ink-soft)', whiteSpace: 'pre-wrap' }}>
-      {words.map((w, i) => (w.trim() ? <span key={i} className="mz-word">{w}</span> : w))}
-      <span style={{ display: 'inline-block', width: 7, height: 15, background: 'var(--accent)', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'mz-pulse .8s infinite' }} />
+    <div className="mz-streaming">
+      <Markdown text={stripThoughts(text)} />
+      <span className="mz-cursor" />
     </div>
   )
 }

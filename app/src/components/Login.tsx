@@ -96,7 +96,7 @@ export function Login() {
       </div>
 
       {/* Form */}
-      <div style={{ flex: 1, background: 'var(--paper-panel)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+      <div className="login-form-pane" style={{ flex: 1, background: 'var(--paper-panel)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
         <div style={{ width: '100%', maxWidth: 368, animation: 'mz-rise .6s cubic-bezier(.16,1,.3,1) both' }}>
           <h2 className="display" style={{ fontWeight: 400, fontSize: 36, margin: '0 0 5px', letterSpacing: '-.015em', color: '#1a1612' }}>Welcome back</h2>
           <p style={{ fontSize: 14, color: 'var(--muted)', margin: '0 0 22px' }}>
