@@ -4,8 +4,36 @@
 // from the browser. Falls back to a built-in stub so the chat UX always works.
 import { supabase, hasSupabase } from './supabase'
 import { isDemo } from './demo'
+import { deviceId, setPreviewRemaining } from './preview'
 import { stripThoughts } from './format'
 import type { ChatMode, Message } from './types'
+
+const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const PREVIEW_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/preview-chat`
+
+// Preview mode (no login): call the capped anonymous gateway. Real answers,
+// 10 free messages per device, key server-side.
+async function streamPreview(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  let res: Response
+  try {
+    res = await fetch(PREVIEW_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: ANON, Authorization: `Bearer ${ANON}` },
+      body: JSON.stringify({ device_id: deviceId(), mode: req.mode, context: req.context ?? '', messages: req.messages }),
+      signal: req.signal,
+    })
+  } catch {
+    return note(req, onToken, 'Preview is unavailable right now. Please try again in a moment.')
+  }
+  if (res.status === 429) {
+    setPreviewRemaining(0)
+    return note(req, onToken, "You've used all 10 free preview messages. Sign in with your enrollment number to keep chatting — your campus account has no limit.")
+  }
+  if (!res.ok || !res.body) return note(req, onToken, 'Preview is unavailable right now. Please try again.')
+  const rem = res.headers.get('x-preview-remaining')
+  if (rem != null) setPreviewRemaining(Number(rem))
+  return streamOpenAISSE(res, onToken)
+}
 
 // Preview mode: call the Gemini/Gemma OpenAI-compatible endpoint directly from
 // the browser (key in VITE_GEMINI_API_KEY). Dev-only.
@@ -157,10 +185,11 @@ async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Pro
 }
 
 export async function streamChat(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
-  // If a Gemini/Gemma key is configured, answer directly (works for both preview
-  // and signed-in accounts). The edge-function gateway is used only when no
-  // browser key is set (production with provider secrets).
-  if (isDemo() || GEMINI_KEY) return streamGeminiDirect(req, onToken)
+  // Preview (no login): capped anonymous gateway with real answers.
+  if (isDemo()) return streamPreview(req, onToken)
+  // Local dev with a browser key: answer directly. In production no key is in
+  // the bundle, so signed-in users fall through to the secure edge function.
+  if (GEMINI_KEY) return streamGeminiDirect(req, onToken)
   if (!hasSupabase) return stub(req, onToken)
   try {
     const { data } = await supabase.auth.getSession()

@@ -13,6 +13,8 @@ import { ShareSheet } from './ShareSheet'
 import type { ShareTarget } from './ShareSheet'
 import { Markdown } from './Markdown'
 import { stripThoughts } from '../lib/format'
+import { isDemo, exitDemo } from '../lib/demo'
+import { PREVIEW_LIMIT, previewRemaining } from '../lib/preview'
 import { Logo } from './Logo'
 
 interface Props {
@@ -38,8 +40,16 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [feedbackFor, setFeedbackFor] = useState<{ m: Message; type: 'up' | 'down' } | null>(null)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [previewLeft, setPreviewLeft] = useState(() => (isDemo() ? previewRemaining() : PREVIEW_LIMIT))
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    if (!isDemo()) return
+    const on = (e: Event) => setPreviewLeft((e as CustomEvent).detail as number)
+    window.addEventListener('merzal-preview', on)
+    return () => window.removeEventListener('merzal-preview', on)
+  }, [])
 
   useEffect(() => {
     if (!chatId) { setMessages([]); return }
@@ -147,6 +157,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   function send() {
     const text = input.trim()
     if ((!text && !attachments.length) || !chatId || streaming || thinking) return
+    if (isDemo() && previewLeft <= 0) return // free preview used up
     const atts = attachments
     setInput('')
     setAttachments([])
@@ -195,7 +206,8 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           </div>
         )}
       </div>
-      <Composer mode={mode} setMode={setMode} input={input} setInput={setInput} onSend={send} streaming={streaming || thinking} onStop={stop} conn={conn} attachments={attachments} onFiles={addFiles} onRemoveAttachment={(id) => setAttachments((p) => p.filter((a) => a.id !== id))} />
+      {isDemo() && <PreviewBanner left={previewLeft} />}
+      <Composer mode={mode} setMode={setMode} input={input} setInput={setInput} onSend={send} streaming={streaming || thinking} onStop={stop} conn={conn} attachments={attachments} onFiles={addFiles} onRemoveAttachment={(id) => setAttachments((p) => p.filter((a) => a.id !== id))} blocked={isDemo() && previewLeft <= 0} />
       {feedbackFor && (
         <FeedbackModal
           type={feedbackFor.type}
@@ -314,10 +326,33 @@ function WordReveal({ text }: { text: string }) {
   )
 }
 
+// Free-preview credit strip. Shows remaining; when used up, a sign-in CTA.
+function PreviewBanner({ left }: { left: number }) {
+  function signIn() { exitDemo(); window.location.href = window.location.pathname }
+  if (left <= 0) {
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '10px 16px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#2a2520', color: '#f0ead8', borderRadius: 14, padding: '12px 14px', fontSize: 13 }}>
+          <span style={{ flex: 1, minWidth: 160 }}>You've used all {PREVIEW_LIMIT} free preview messages.</span>
+          <button onClick={signIn} style={{ height: 34, padding: '0 16px', border: 'none', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Sign in to continue →</button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: '8px 16px 0', display: 'flex', justifyContent: 'center' }}>
+      <span className="mono" style={{ fontSize: 10.5, letterSpacing: '.04em', color: 'var(--faint)' }}>
+        ✨ Preview · {left} of {PREVIEW_LIMIT} free messages left · <button onClick={signIn} style={{ border: 'none', background: 'none', color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>sign in</button> for unlimited
+      </span>
+    </div>
+  )
+}
+
 function Composer(p: {
   mode: ChatMode; setMode: (m: ChatMode) => void; input: string; setInput: (s: string) => void
   onSend: () => void; streaming: boolean; onStop: () => void; conn: ConnState
   attachments: PendingAttachment[]; onFiles: (f: FileList | File[]) => void; onRemoveAttachment: (id: string) => void
+  blocked?: boolean
 }) {
   const docRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
@@ -353,9 +388,10 @@ function Composer(p: {
             value={p.input}
             onChange={(e) => p.setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); p.onSend() } }}
-            placeholder={p.conn === 'offline' ? brand.inputPlaceholderOffline : brand.inputPlaceholder}
+            placeholder={p.blocked ? 'Sign in to keep chatting…' : p.conn === 'offline' ? brand.inputPlaceholderOffline : brand.inputPlaceholder}
             rows={1}
-            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 16, lineHeight: 1.5, maxHeight: 150, background: 'transparent', color: 'var(--ink)', padding: '6px 2px 2px' }}
+            disabled={p.blocked}
+            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 16, lineHeight: 1.5, maxHeight: 150, background: 'transparent', color: 'var(--ink)', padding: '6px 2px 2px', opacity: p.blocked ? 0.55 : 1 }}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
             <div style={{ position: 'relative', flex: 'none' }}>
@@ -376,7 +412,7 @@ function Composer(p: {
             {p.streaming ? (
               <button onClick={p.onStop} style={btn('#1d1a16')}>■</button>
             ) : (
-              <button onClick={p.onSend} style={btn('var(--accent)')}>↑</button>
+              <button onClick={p.onSend} disabled={p.blocked} style={{ ...btn('var(--accent)'), opacity: p.blocked ? 0.4 : 1 }}>↑</button>
             )}
           </div>
         </div>
