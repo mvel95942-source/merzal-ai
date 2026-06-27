@@ -4,7 +4,6 @@ import { hasSupabase } from './lib/supabase'
 import { brand } from './lib/brand'
 import type { Chat, Profile } from './lib/types'
 import { Login } from './components/Login'
-import { Setup } from './components/Setup'
 import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { Settings } from './components/Settings'
@@ -16,7 +15,7 @@ import { exportPdf, exportText } from './lib/export'
 import { useConnection } from './hooks/useConnection'
 import { useIsMobile } from './hooks/useIsMobile'
 
-type Phase = 'loading' | 'login' | 'setup' | 'app'
+type Phase = 'loading' | 'login' | 'app'
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('loading')
@@ -47,8 +46,12 @@ export default function App() {
     if (!session) { setPhase('login'); return }
     setAccount(emailToRoll(session.user.email) ?? 'You')
     const prof = await api.getProfile()
-    setProfile(prof)
-    if (!prof || !prof.onboarding_done) { setPhase('setup'); return }
+    if (prof && !prof.onboarding_done) {
+      await api.upsertProfile({ onboarding_done: true })
+      setProfile({ ...prof, onboarding_done: true })
+    } else {
+      setProfile(prof)
+    }
     // Continue a conversation opened from a share link.
     let openId = localStorage.getItem('merzal_open_chat')
     const contTok = localStorage.getItem('merzal_continue_token')
@@ -95,7 +98,6 @@ export default function App() {
     return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)' }} className="mono">Loading {brand.name}…</div>
   }
   if (phase === 'login') return <Login />
-  if (phase === 'setup') return <Setup onDone={loadAfterAuth} />
 
   const closeDrawer = () => setDrawerOpen(false)
 
@@ -154,7 +156,7 @@ export default function App() {
               <button onClick={() => setDrawerOpen(true)} aria-label="Menu" style={{ width: 36, height: 36, flex: 'none', border: '1px solid var(--line-strong)', borderRadius: 9, background: '#fff', fontSize: 16, display: 'grid', placeItems: 'center' }}>☰</button>
             )}
             <span className="mono" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {profile?.department ?? 'Campus'}{profile?.semester ? ` · Sem ${profile.semester}` : ''}
+              {brand.sidebarSub}
             </span>
           </div>
         </header>
@@ -167,7 +169,6 @@ export default function App() {
           profile={profile}
           onClose={() => setShowSettings(false)}
           onSignOut={async () => { await api.signOut(); setShowSettings(false); setPhase('login') }}
-          onProfile={(p) => setProfile((prev) => (prev ? { ...prev, ...p } : prev))}
         />
       )}
 

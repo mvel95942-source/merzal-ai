@@ -11,9 +11,8 @@
 // See REBRAND.md for the full walkthrough.
 // ════════════════════════════════════════════════════════════════════════
 
-// 'college' → Setup asks Department + Semester.
-// 'school'  → Setup asks Class + Section.
-// 'open'    → no Setup screen at all (straight to chat).
+// Audience keeps tenant copy/branding flexible. Login now goes straight to chat
+// after authentication; there is no student department/semester setup screen.
 export type Audience = 'college' | 'school' | 'open'
 
 export interface Brand {
@@ -41,7 +40,7 @@ export interface Brand {
   emptyTitle: string
   emptyDesc: string
 
-  // Onboarding option lists (used per audience).
+  // Legacy option lists kept for older tenant JSON compatibility.
   departments: string[]
   semesters: number[]
   classes: string[]
