@@ -186,7 +186,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     <main style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--paper-panel)', height: '100%' }}>
       <div ref={scrollRef} className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '24px 0 8px', display: empty ? 'flex' : 'block', alignItems: 'center', justifyContent: 'center' }}>
         {empty ? (
-          <Hero onPick={(q) => { setInput(q); setTimeout(send, 0) }} disabled={!chatId} />
+          <Hero />
         ) : (
           <div style={{ maxWidth: 740, margin: '0 auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 22 }}>
             {messages.map((m) => (
@@ -332,7 +332,7 @@ function PreviewBanner({ left }: { left: number }) {
     return (
       <div style={{ maxWidth: 740, margin: '0 auto', padding: '10px 16px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--surface-soft)', color: 'var(--ink)', borderRadius: 14, padding: '12px 14px', fontSize: 13 }}>
-          <span style={{ flex: 1, minWidth: 160 }}>You've used all {PREVIEW_LIMIT} free preview messages.</span>
+          <span style={{ flex: 1, minWidth: 160 }}>You've used all {PREVIEW_LIMIT} free preview messages for today — they reset tomorrow. Sign in for unlimited.</span>
           <button onClick={signIn} style={{ height: 34, padding: '0 16px', border: 'none', borderRadius: 999, background: 'var(--ink)', color: 'var(--paper)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Sign in to continue →</button>
         </div>
       </div>
@@ -341,7 +341,7 @@ function PreviewBanner({ left }: { left: number }) {
   return (
     <div style={{ maxWidth: 740, margin: '0 auto', padding: '6px 16px 0', display: 'flex', justifyContent: 'center' }}>
       <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>
-        Preview · {left} of {PREVIEW_LIMIT} free messages left · <button onClick={signIn} style={{ border: 'none', background: 'none', color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>sign in</button> for unlimited
+        Preview · {left} of {PREVIEW_LIMIT} free messages left today · <button onClick={signIn} style={{ border: 'none', background: 'none', color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>sign in</button> for unlimited
       </span>
     </div>
   )
@@ -484,15 +484,11 @@ function ModePill({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) =>
   )
 }
 
-function Hero({ onPick, disabled }: { onPick: (q: string) => void; disabled?: boolean }) {
+// Clean ChatGPT-style empty state: just the question, no suggestion cards.
+function Hero() {
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', width: '100%', padding: '0 24px', textAlign: 'center' }}>
-      <h1 style={{ fontWeight: 500, fontSize: 30, letterSpacing: '-.01em', margin: '0 0 28px', color: 'var(--ink)' }}>{brand.emptyTitle}</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        {brand.prompts.map((q) => (
-          <button key={q} disabled={disabled} onClick={() => onPick(q)} style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 14, background: 'var(--surface)', padding: '14px 16px', fontSize: 13.5, color: 'var(--ink-soft)', opacity: disabled ? 0.5 : 1, cursor: 'pointer' }}>{q}</button>
-        ))}
-      </div>
+      <h1 style={{ fontWeight: 500, fontSize: 28, letterSpacing: '-.01em', margin: 0, color: 'var(--ink)' }}>{brand.emptyTitle}</h1>
     </div>
   )
 }
