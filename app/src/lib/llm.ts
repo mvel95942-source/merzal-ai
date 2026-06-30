@@ -29,7 +29,7 @@ async function streamPreview(req: LLMRequest, onToken: (t: string) => void): Pro
   }
   if (res.status === 429) {
     setPreviewRemaining(0)
-    return note(req, onToken, "You've used all 10 free preview messages. Sign in with your enrollment number to keep chatting — your campus account has no limit.")
+    return note(req, onToken, "You've used all 10 free preview messages for today — they reset tomorrow. Sign in with your enrollment number to keep chatting now — your campus account has no limit.")
   }
   if (!res.ok || !res.body) return note(req, onToken, 'Preview is unavailable right now. Please try again.')
   const rem = res.headers.get('x-preview-remaining')
