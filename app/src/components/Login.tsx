@@ -133,7 +133,7 @@ export function Login() {
   // ── Desktop: side-by-side split ──────────────────────────────────────
   return (
     <div className="login-shell" style={{ minHeight: '100vh', display: 'flex', background: '#0d0d0d' }}>
-      <div className="hero-pane" style={{ flex: 1.1, position: 'relative', overflow: 'hidden', color: '#ececec', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: 'radial-gradient(120% 100% at 0% 0%, #1e1e1e 0%, #0d0d0d 55%)' }}>
+      <div className="hero-pane" style={{ flex: 1.1, position: 'relative', overflow: 'hidden', color: '#ececec', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: 'radial-gradient(120% 100% at 0% 0%, #1e1e1e 0%, #0d0d0d 55%)', borderRight: '1px solid #1c1c1c' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
           <Logo size={40} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1 }}>
@@ -151,8 +151,8 @@ export function Login() {
         </div>
         <div style={{ position: 'absolute', right: -110, bottom: -110, width: 340, height: 340, borderRadius: '50%', border: '1.5px solid #2a2a2a', background: 'radial-gradient(circle,rgba(255,255,255,0.03) 0%,transparent 70%)' }} />
       </div>
-      <div className="login-form-pane" style={{ flex: 1, background: 'var(--paper-panel)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-        <div style={{ animation: 'mz-rise .6s cubic-bezier(.16,1,.3,1) both' }}>{form}</div>
+      <div className="login-form-pane" style={{ flex: 1, background: 'var(--paper-app)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+        <div style={{ width: '100%', maxWidth: 408, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '42px 38px', boxShadow: 'var(--shadow-pop)', animation: 'mz-rise .6s cubic-bezier(.16,1,.3,1) both' }}>{form}</div>
       </div>
     </div>
   )
@@ -207,6 +207,6 @@ function AnimatedTags({ tags }: { tags: readonly string[] }) {
 }
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }
-const field: React.CSSProperties = { width: '100%', height: 48, border: '1px solid var(--line-strong)', borderRadius: 12, background: 'var(--surface)', padding: '0 15px', fontSize: 16, color: 'var(--ink)', outline: 'none' }
+const field: React.CSSProperties = { width: '100%', height: 48, border: '1px solid var(--line-strong)', borderRadius: 12, background: 'var(--paper-app)', padding: '0 15px', fontSize: 16, color: 'var(--ink)', outline: 'none' }
 const primaryBtn: React.CSSProperties = { width: '100%', height: 50, border: 'none', borderRadius: 999, background: 'var(--ink)', color: 'var(--paper)', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }
 const linkBtn: React.CSSProperties = { border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 12.5, cursor: 'pointer', padding: 0 }
