@@ -114,7 +114,7 @@ export function Login() {
   if (isMobile) {
     const login = view === 'login'
     return (
-      <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden', background: '#0d0d0d' }}>
+      <div className="landing-theme" style={{ height: '100dvh', position: 'relative', overflow: 'hidden', background: '#120d09' }}>
         {/* Hero — scales + fades back when the sheet is up */}
         <div style={{ position: 'absolute', inset: 0, transition: 'transform .42s cubic-bezier(.32,0,.2,1), opacity .38s ease', transform: login ? 'scale(.95) translateY(-12px)' : 'none', opacity: login ? 0 : 1, pointerEvents: login ? 'none' : 'auto' }}>
           <Hero onSignIn={() => setView('login')} onExplore={explore} />
@@ -132,8 +132,8 @@ export function Login() {
 
   // ── Desktop: side-by-side split ──────────────────────────────────────
   return (
-    <div className="login-shell" style={{ minHeight: '100vh', display: 'flex', background: '#0d0d0d' }}>
-      <div className="hero-pane" style={{ flex: 1.1, position: 'relative', overflow: 'hidden', color: '#ececec', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: 'radial-gradient(120% 100% at 0% 0%, #1e1e1e 0%, #0d0d0d 55%)', borderRight: '1px solid #1c1c1c' }}>
+    <div className="login-shell landing-theme" style={{ minHeight: '100vh', display: 'flex', background: '#120d09' }}>
+      <div className="hero-pane" style={{ flex: 1.1, position: 'relative', overflow: 'hidden', color: '#f6efe6', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: 'radial-gradient(85% 70% at 82% 8%, rgba(217,110,60,0.30), transparent 55%), radial-gradient(75% 65% at 6% 94%, rgba(96,70,150,0.22), transparent 55%), radial-gradient(120% 100% at 0% 0%, #281d13 0%, #120d09 62%)', borderRight: '1px solid #2a1d12' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
           <Logo size={40} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1 }}>
@@ -161,7 +161,7 @@ export function Login() {
 // Full-screen mobile hero with a Sign In button pinned to the bottom.
 function Hero({ onSignIn, onExplore }: { onSignIn: () => void; onExplore: () => void }) {
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', color: '#ececec', position: 'relative', overflow: 'hidden', background: 'radial-gradient(125% 100% at 0% 0%, #1e1e1e 0%, #0d0d0d 55%)' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', color: '#f6efe6', position: 'relative', overflow: 'hidden', background: 'radial-gradient(90% 55% at 88% 6%, rgba(217,110,60,0.34), transparent 55%), radial-gradient(80% 55% at 4% 96%, rgba(96,70,150,0.24), transparent 55%), radial-gradient(125% 100% at 0% 0%, #281d13 0%, #120d09 62%)' }}>
       <div style={{ padding: '54px 28px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
         <Logo size={42} />
         <div style={{ lineHeight: 1.1 }}>
@@ -200,13 +200,13 @@ function AnimatedTags({ tags }: { tags: readonly string[] }) {
   }, [tags.length])
   return (
     <div className="mono" style={{ height: 14, marginBottom: 22, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ececec', animation: 'mz-pulse 1s infinite' }} />
-      <span key={i} style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: '#b4b4b4', animation: 'tag-stream 2.2s both' }}>{tags[i]}</span>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 10px 1px rgba(217,110,60,0.6)', animation: 'mz-pulse 1s infinite' }} />
+      <span key={i} style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: '#e6b9a0', animation: 'tag-stream 2.2s both' }}>{tags[i]}</span>
     </div>
   )
 }
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }
 const field: React.CSSProperties = { width: '100%', height: 48, border: '1px solid var(--line-strong)', borderRadius: 12, background: 'var(--paper-app)', padding: '0 15px', fontSize: 16, color: 'var(--ink)', outline: 'none' }
-const primaryBtn: React.CSSProperties = { width: '100%', height: 50, border: 'none', borderRadius: 999, background: 'var(--ink)', color: 'var(--paper)', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }
+const primaryBtn: React.CSSProperties = { width: '100%', height: 50, border: 'none', borderRadius: 999, background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 8px 22px -8px rgba(191,94,54,0.7)' }
 const linkBtn: React.CSSProperties = { border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 12.5, cursor: 'pointer', padding: 0 }

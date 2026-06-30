@@ -65,6 +65,27 @@
   }
 }
 
+/* The landing page keeps its OWN colourful identity regardless of the system
+   light/dark setting — only the chat app follows prefers-color-scheme. The
+   form side is a warm, clean card so it stays readable against the vivid
+   gradient hero. */
+.landing-theme {
+  color-scheme: light;
+  --paper: #ffffff;
+  --paper-panel: #fbf7f1;
+  --paper-app: #f4ede2;
+  --surface: #ffffff;
+  --surface-soft: #f3ece1;
+  --ink: #1b1712;
+  --ink-soft: #38312a;
+  --muted: #857b6d;
+  --faint: #a89f8f;
+  --line: #ece3d4;
+  --line-strong: #dccfba;
+  --overlay: rgba(20, 12, 6, 0.5);
+  --shadow-pop: 0 22px 60px -14px rgba(80, 45, 20, 0.30);
+}
+
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; padding: 0; height: 100%; }
 body {
