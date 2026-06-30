@@ -50,23 +50,23 @@ export function Sidebar(p: Props) {
   }
 
   return (
-    <aside style={{ width: '100%', height: '100%', background: 'var(--paper-app)', borderRight: '1px solid #e6e0d2', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '18px 12px 14px 15px', display: 'flex', alignItems: 'center', gap: 11 }}>
-        <Logo size={32} />
+    <aside style={{ width: '100%', height: '100%', background: 'var(--paper-app)', borderRight: '1px solid var(--line)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '16px 12px 12px 15px', display: 'flex', alignItems: 'center', gap: 11 }}>
+        <Logo size={30} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.1, flex: 1, minWidth: 0 }}>
-          <span className="display" style={{ fontSize: 18, fontWeight: 500, color: '#1a1612' }}>{brand.name}</span>
-          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--faint)' }}>{brand.sidebarSub}</span>
+          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>{brand.name}</span>
+          <span style={{ fontSize: 11, color: 'var(--faint)' }}>{brand.sidebarSub}</span>
         </div>
       </div>
 
       <div style={{ padding: '2px 12px 9px' }}>
-        <button onClick={p.onNew} style={{ width: '100%', height: 40, border: '1px solid #e2dccd', borderRadius: 8, background: '#fff', color: 'var(--ink-soft)', fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px' }}>
-          <Icon path="M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /> New chat
+        <button onClick={p.onNew} style={{ width: '100%', height: 40, border: 'none', borderRadius: 10, background: 'var(--surface-soft)', color: 'var(--ink)', fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px' }}>
+          <Icon path="M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke="var(--ink-soft)" /> New chat
         </button>
       </div>
 
       <div style={{ padding: '0 12px 8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, border: '1px solid #e6dfd0', borderRadius: 9, background: '#f4eee2', padding: '0 11px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, border: 'none', borderRadius: 10, background: 'var(--surface-soft)', padding: '0 11px' }}>
           <Icon path="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M21 21l-4-4" size={14} stroke="var(--faint)" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats" style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--ink)' }} />
         </div>
@@ -77,7 +77,7 @@ export function Sidebar(p: Props) {
           <div key={g.label}>
             <div className="mono" style={{ fontSize: 9.5, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--faint)', padding: '11px 8px 5px' }}>{g.label}</div>
             {g.items.map((c) => (
-              <div key={c.id} className="chat-row" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, height: 36, borderRadius: 8, padding: '0 6px 0 10px', fontSize: 13.5, color: 'var(--ink-soft)', background: c.id === p.activeId ? '#e8e1d3' : 'transparent' }}>
+              <div key={c.id} className="chat-row" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, height: 36, borderRadius: 8, padding: '0 6px 0 10px', fontSize: 13.5, color: 'var(--ink-soft)', background: c.id === p.activeId ? 'var(--surface-soft)' : 'transparent' }}>
                 {renaming === c.id ? (
                   <input autoFocus value={renameText} onChange={(e) => setRenameText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(null) }} onBlur={commitRename} style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--ink)', font: 'inherit' }} />
                 ) : (
@@ -90,7 +90,7 @@ export function Sidebar(p: Props) {
                 {menuFor === c.id && (
                   <>
                     <div onClick={() => setMenuFor(null)} style={{ position: 'fixed', inset: 0, zIndex: 48 }} />
-                    <div style={{ position: 'absolute', right: 6, top: 34, zIndex: 49, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 12px 30px -8px #0003', padding: 4, width: 184 }}>
+                    <div style={{ position: 'absolute', right: 6, top: 34, zIndex: 49, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, boxShadow: 'var(--shadow-pop)', padding: 4, width: 184 }}>
                       <MenuItem label="Rename" onClick={() => startRename(c)} />
                       <MenuItem label={c.pinned ? 'Unpin' : 'Pin'} onClick={() => { p.onPin(c.id, !c.pinned); setMenuFor(null) }} />
                       <div style={{ height: 1, background: 'var(--line)', margin: '3px 8px' }} />
@@ -109,9 +109,9 @@ export function Sidebar(p: Props) {
         {groups.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: 'var(--faint)' }}>No chats yet.</div>}
       </div>
 
-      <div style={{ borderTop: '1px solid #e6e0d2', padding: '9px 11px' }}>
+      <div style={{ borderTop: '1px solid var(--line)', padding: '9px 11px' }}>
         <button onClick={p.onSettings} style={{ width: '100%', height: 48, border: 'none', borderRadius: 11, background: 'transparent', color: 'var(--ink-soft)', fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', textAlign: 'left' }}>
-          <span style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 700, color: '#fff', flex: 'none' }}>{(p.account[0] || 'U').toUpperCase()}</span>
+          <span style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 700, color: '#ffffff', flex: 'none' }}>{(p.account[0] || 'U').toUpperCase()}</span>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0, lineHeight: 1.2 }}>
             <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.account}</span>
             <span style={{ fontSize: 11, color: 'var(--faint)' }}>Memory &amp; settings</span>

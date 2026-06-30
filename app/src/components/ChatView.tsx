@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
 import { aiProvider } from '../lib/ai'
@@ -15,7 +15,6 @@ import { Markdown } from './Markdown'
 import { stripThoughts } from '../lib/format'
 import { isDemo, exitDemo } from '../lib/demo'
 import { PREVIEW_LIMIT, previewRemaining } from '../lib/preview'
-import { Logo } from './Logo'
 
 interface Props {
   chatId: string | null
@@ -185,11 +184,11 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
 
   return (
     <main style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--paper-panel)', height: '100%' }}>
-      <div ref={scrollRef} className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '28px 0', display: empty ? 'flex' : 'block', alignItems: 'center', justifyContent: 'center' }}>
+      <div ref={scrollRef} className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '24px 0 8px', display: empty ? 'flex' : 'block', alignItems: 'center', justifyContent: 'center' }}>
         {empty ? (
           <Hero onPick={(q) => { setInput(q); setTimeout(send, 0) }} disabled={!chatId} />
         ) : (
-          <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <div style={{ maxWidth: 740, margin: '0 auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 22 }}>
             {messages.map((m) => (
               <MessageRow
                 key={m.id}
@@ -252,7 +251,7 @@ function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.content)
 
-  // ── User message: right-aligned bubble, Edit + Copy ──────────────
+  // ── User message: right-aligned ChatGPT-style bubble ─────────────
   if (m.role === 'user') {
     if (editing) {
       return (
@@ -264,7 +263,7 @@ function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit() } if (e.key === 'Escape') cancelEdit() }}
               rows={Math.min(8, draft.split('\n').length + 1)}
-              style={{ width: '100%', border: '1px solid var(--accent)', borderRadius: 14, padding: '11px 14px', fontSize: 14.5, lineHeight: 1.5, resize: 'vertical', outline: 'none', background: '#fff', color: 'var(--ink)' }}
+              style={{ width: '100%', border: '1px solid var(--accent)', borderRadius: 18, padding: '12px 14px', fontSize: 15, lineHeight: 1.5, resize: 'vertical', outline: 'none', background: 'var(--surface)', color: 'var(--ink)' }}
             />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 7 }}>
               <button onClick={cancelEdit} style={miniBtn(false)}>Cancel</button>
@@ -277,7 +276,7 @@ function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
     return (
       <div className="msg" style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <div style={{ maxWidth: '78%' }}>
-          <div style={{ background: '#fff', border: '1px solid var(--line-strong)', borderRadius: '16px 16px 4px 16px', padding: '11px 15px', fontSize: 14.5, lineHeight: 1.5, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+          <div style={{ background: 'var(--user-bubble)', borderRadius: 22, padding: '10px 16px', fontSize: 15.5, lineHeight: 1.5, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
           <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 6, justifyContent: 'flex-end' }}>
             <button className="act-btn" disabled={busy} onClick={() => { setDraft(m.content); setEditing(true) }}>Edit</button>
             <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
@@ -309,7 +308,7 @@ function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
 }
 
 function miniBtn(primary: boolean): React.CSSProperties {
-  return { height: 30, padding: '0 14px', borderRadius: 9, fontSize: 12.5, fontWeight: 600, border: primary ? 'none' : '1px solid var(--line-strong)', background: primary ? 'var(--accent)' : '#fff', color: primary ? '#fff' : 'var(--ink)' }
+  return { height: 32, padding: '0 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, border: primary ? 'none' : '1px solid var(--line-strong)', background: primary ? 'var(--ink)' : 'var(--surface)', color: primary ? 'var(--paper)' : 'var(--ink)' }
 }
 
 // Word-by-word blur-to-sharp reveal of the streamed text.
@@ -331,18 +330,18 @@ function PreviewBanner({ left }: { left: number }) {
   function signIn() { exitDemo(); window.location.href = window.location.pathname }
   if (left <= 0) {
     return (
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '10px 16px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#2a2520', color: '#f0ead8', borderRadius: 14, padding: '12px 14px', fontSize: 13 }}>
+      <div style={{ maxWidth: 740, margin: '0 auto', padding: '10px 16px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--surface-soft)', color: 'var(--ink)', borderRadius: 14, padding: '12px 14px', fontSize: 13 }}>
           <span style={{ flex: 1, minWidth: 160 }}>You've used all {PREVIEW_LIMIT} free preview messages.</span>
-          <button onClick={signIn} style={{ height: 34, padding: '0 16px', border: 'none', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Sign in to continue →</button>
+          <button onClick={signIn} style={{ height: 34, padding: '0 16px', border: 'none', borderRadius: 999, background: 'var(--ink)', color: 'var(--paper)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Sign in to continue →</button>
         </div>
       </div>
     )
   }
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '8px 16px 0', display: 'flex', justifyContent: 'center' }}>
-      <span className="mono" style={{ fontSize: 10.5, letterSpacing: '.04em', color: 'var(--faint)' }}>
-        ✨ Preview · {left} of {PREVIEW_LIMIT} free messages left · <button onClick={signIn} style={{ border: 'none', background: 'none', color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>sign in</button> for unlimited
+    <div style={{ maxWidth: 740, margin: '0 auto', padding: '6px 16px 0', display: 'flex', justifyContent: 'center' }}>
+      <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>
+        Preview · {left} of {PREVIEW_LIMIT} free messages left · <button onClick={signIn} style={{ border: 'none', background: 'none', color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>sign in</button> for unlimited
       </span>
     </div>
   )
@@ -357,22 +356,35 @@ function Composer(p: {
   const docRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const camRef = useRef<HTMLInputElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const pick = (r: React.RefObject<HTMLInputElement | null>) => { r.current?.click(); setMenuOpen(false) }
   const onInput = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.length) p.onFiles(e.target.files); e.target.value = '' }
 
+  // Auto-grow the textarea up to ~7 lines (168px from CSS), then scroll.
+  useLayoutEffect(() => {
+    const ta = taRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    const next = Math.min(ta.scrollHeight, 168)
+    ta.style.height = next + 'px'
+    ta.style.overflowY = ta.scrollHeight > 168 ? 'auto' : 'hidden'
+  }, [p.input])
+
+  const canSend = !p.blocked && (p.input.trim().length > 0 || p.attachments.length > 0)
+
   return (
-    <div style={{ borderTop: '1px solid var(--line)', background: 'var(--paper-panel)', padding: '12px 0 14px', paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 16px' }}>
+    <div style={{ background: 'var(--paper-panel)', padding: '6px 0 10px', paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}>
+      <div style={{ maxWidth: 740, margin: '0 auto', padding: '0 12px' }}>
         {p.attachments.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '0 0 8px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '0 4px 8px' }}>
             {p.attachments.map((a) => (
-              <div key={a.id} title={a.note ?? a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line-strong)', borderRadius: 10, padding: '6px 8px', background: a.status === 'unsupported' ? '#fbeee6' : '#fff', maxWidth: 220 }}>
+              <div key={a.id} title={a.note ?? a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line-strong)', borderRadius: 12, padding: '6px 10px', background: a.status === 'unsupported' ? 'var(--accent-soft)' : 'var(--surface)', maxWidth: 220 }}>
                 {a.kind === 'image' && a.dataUrl
-                  ? <img src={a.dataUrl} alt={a.name} style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover' }} />
+                  ? <img src={a.dataUrl} alt={a.name} style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover' }} />
                   : <span style={{ fontSize: 18 }}>{a.status === 'unsupported' ? '⚠️' : '📄'}</span>}
-                <span style={{ fontSize: 12, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-                <button onClick={() => p.onRemoveAttachment(a.id)} style={{ border: 'none', background: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
+                <span style={{ fontSize: 12.5, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                <button onClick={() => p.onRemoveAttachment(a.id)} style={{ border: 'none', background: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
             ))}
           </div>
@@ -382,24 +394,27 @@ function Composer(p: {
         <input ref={imgRef} type="file" multiple accept={ACCEPT_IMAGES} onChange={onInput} style={{ display: 'none' }} />
         <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onInput} style={{ display: 'none' }} />
 
-        {/* Composer card: textarea on top, a Claude-style toolbar (add · mode · send) below */}
-        <div style={{ border: '1px solid var(--line-strong)', borderRadius: 20, background: '#fff', padding: '8px 8px 8px 14px', boxShadow: '0 1px 3px #0000000a' }}>
+        {/* ChatGPT-style smooth pill: rounded composer with textarea on top,
+            a thin action row below. No hard borders. */}
+        <div style={{ background: 'var(--composer-bg)', borderRadius: 28, padding: '10px 8px 6px 16px', boxShadow: 'none' }}>
           <textarea
+            ref={taRef}
+            className="mz-composer-input"
             value={p.input}
             onChange={(e) => p.setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); p.onSend() } }}
             placeholder={p.blocked ? 'Sign in to keep chatting…' : p.conn === 'offline' ? brand.inputPlaceholderOffline : brand.inputPlaceholder}
             rows={1}
             disabled={p.blocked}
-            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 16, lineHeight: 1.5, maxHeight: 150, background: 'transparent', color: 'var(--ink)', padding: '6px 2px 2px', opacity: p.blocked ? 0.55 : 1 }}
+            style={{ opacity: p.blocked ? 0.55 : 1, paddingTop: 4, paddingBottom: 6 }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
             <div style={{ position: 'relative', flex: 'none' }}>
-              <button title="Add" aria-label="Add" onClick={() => setMenuOpen((v) => !v)} style={{ ...iconBtn, fontSize: 22, color: 'var(--muted)', transform: menuOpen ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }}>＋</button>
+              <button title="Add" aria-label="Add" onClick={() => setMenuOpen((v) => !v)} className="mz-icon-btn" style={{ transform: menuOpen ? 'rotate(45deg)' : 'none', transition: 'transform .15s', fontSize: 22 }}>＋</button>
               {menuOpen && (
                 <>
                   <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-                  <div style={{ position: 'absolute', bottom: 46, left: 0, zIndex: 31, background: '#fff', border: '1px solid var(--line)', borderRadius: 12, boxShadow: '0 12px 30px -8px #0003', padding: 5, width: 210 }}>
+                  <div style={{ position: 'absolute', bottom: 46, left: 0, zIndex: 31, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, boxShadow: 'var(--shadow-pop)', padding: 6, width: 210 }}>
                     <AddItem icon="🖼️" label="Upload photo" onClick={() => pick(imgRef)} />
                     <AddItem icon="📄" label="Upload file" onClick={() => pick(docRef)} />
                     <AddItem icon="📷" label="Take photo" onClick={() => pick(camRef)} />
@@ -410,29 +425,31 @@ function Composer(p: {
             <ModePill mode={p.mode} setMode={p.setMode} />
             <div style={{ flex: 1 }} />
             {p.streaming ? (
-              <button onClick={p.onStop} style={btn('#1d1a16')}>■</button>
+              <button onClick={p.onStop} aria-label="Stop" className="mz-send-btn" title="Stop">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+              </button>
             ) : (
-              <button onClick={p.onSend} disabled={p.blocked} style={{ ...btn('var(--accent)'), opacity: p.blocked ? 0.4 : 1 }}>↑</button>
+              <button onClick={p.onSend} disabled={!canSend} aria-label="Send" className="mz-send-btn" title="Send">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg>
+              </button>
             )}
           </div>
         </div>
-        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--faint)', margin: '8px 0 0' }}>{brand.disclaimer}</p>
+        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--faint)', margin: '6px 0 0' }}>{brand.disclaimer}</p>
       </div>
     </div>
   )
 }
 
-const iconBtn: React.CSSProperties = { width: 36, height: 36, flex: 'none', border: 'none', background: 'transparent', borderRadius: 9, fontSize: 17, cursor: 'pointer', display: 'grid', placeItems: 'center' }
-
 function AddItem({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ width: '100%', height: 40, border: 'none', borderRadius: 9, background: 'transparent', display: 'flex', alignItems: 'center', gap: 11, padding: '0 11px', fontSize: 13.5, color: 'var(--ink-soft)', textAlign: 'left', cursor: 'pointer' }}>
+    <button onClick={onClick} style={{ width: '100%', height: 40, border: 'none', borderRadius: 10, background: 'transparent', display: 'flex', alignItems: 'center', gap: 11, padding: '0 11px', fontSize: 13.5, color: 'var(--ink-soft)', textAlign: 'left', cursor: 'pointer' }}>
       <span style={{ fontSize: 17 }}>{icon}</span>{label}
     </button>
   )
 }
 
-// Claude-style selector living inside the composer: tap to switch Campus/World.
+// Selector living inside the composer: tap to switch Campus/World.
 function ModePill({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) => void }) {
   const [open, setOpen] = useState(false)
   const META = {
@@ -442,16 +459,16 @@ function ModePill({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) =>
   const cur = META[mode]
   return (
     <div style={{ position: 'relative', flex: 'none' }}>
-      <button onClick={() => setOpen((o) => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 10px', borderRadius: 9, border: '1px solid var(--line-strong)', background: '#faf7f1', color: 'var(--ink-soft)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px', borderRadius: 999, border: 'none', background: 'transparent', color: 'var(--ink-soft)', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>
         <span style={{ fontSize: 14 }}>{cur.icon}</span>{cur.label}
         <span style={{ fontSize: 9, opacity: .5 }}>▾</span>
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-          <div style={{ position: 'absolute', bottom: 40, left: 0, zIndex: 31, background: '#fff', border: '1px solid var(--line)', borderRadius: 12, boxShadow: '0 12px 30px -8px #0003', padding: 5, width: 232 }}>
+          <div style={{ position: 'absolute', bottom: 40, left: 0, zIndex: 31, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, boxShadow: 'var(--shadow-pop)', padding: 6, width: 232 }}>
             {(['campus', 'world'] as ChatMode[]).map((m) => (
-              <button key={m} onClick={() => { setMode(m); setOpen(false) }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', border: 'none', borderRadius: 9, background: mode === m ? '#f1ece1' : 'transparent', textAlign: 'left', cursor: 'pointer' }}>
+              <button key={m} onClick={() => { setMode(m); setOpen(false) }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', border: 'none', borderRadius: 10, background: mode === m ? 'var(--surface-soft)' : 'transparent', textAlign: 'left', cursor: 'pointer' }}>
                 <span style={{ fontSize: 19 }}>{META[m].icon}</span>
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{META[m].label}</span>
@@ -470,16 +487,12 @@ function ModePill({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) =>
 function Hero({ onPick, disabled }: { onPick: (q: string) => void; disabled?: boolean }) {
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', width: '100%', padding: '0 24px', textAlign: 'center' }}>
-      <div style={{ display: 'flex', justifyContent: 'center' }}><Logo size={52} /></div>
-      <h1 className="display" style={{ fontWeight: 400, fontSize: 38, letterSpacing: '-.02em', margin: '20px 0 10px' }}>{brand.emptyTitle}</h1>
-      <p style={{ fontSize: 15, color: 'var(--muted)', margin: '0 0 28px', lineHeight: 1.5 }}>{brand.emptyDesc}</p>
+      <h1 style={{ fontWeight: 500, fontSize: 30, letterSpacing: '-.01em', margin: '0 0 28px', color: 'var(--ink)' }}>{brand.emptyTitle}</h1>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {brand.prompts.map((q) => (
-          <button key={q} disabled={disabled} onClick={() => onPick(q)} style={{ textAlign: 'left', border: '1px solid var(--line-strong)', borderRadius: 12, background: '#fff', padding: '13px 15px', fontSize: 13.5, color: 'var(--ink-soft)', opacity: disabled ? 0.5 : 1 }}>{q}</button>
+          <button key={q} disabled={disabled} onClick={() => onPick(q)} style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 14, background: 'var(--surface)', padding: '14px 16px', fontSize: 13.5, color: 'var(--ink-soft)', opacity: disabled ? 0.5 : 1, cursor: 'pointer' }}>{q}</button>
         ))}
       </div>
     </div>
   )
 }
-
-const btn = (bg: string): React.CSSProperties => ({ width: 38, height: 38, flex: 'none', border: 'none', borderRadius: 11, background: bg, color: '#fff', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' })

@@ -19,7 +19,9 @@ async function streamPreview(req: LLMRequest, onToken: (t: string) => void): Pro
     res = await fetch(PREVIEW_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: ANON, Authorization: `Bearer ${ANON}` },
-      body: JSON.stringify({ device_id: deviceId(), mode: req.mode, context: req.context ?? '', messages: req.messages }),
+      // Fold attachments into the last user turn so the gateway forwards them
+      // as multimodal OpenAI-format content (image_url parts + extracted text).
+      body: JSON.stringify({ device_id: deviceId(), mode: req.mode, context: req.context ?? '', messages: foldAttachments(req.messages, req.attachments) }),
       signal: req.signal,
     })
   } catch {
@@ -64,20 +66,28 @@ const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`
 // Compose the API message array, folding attachments into the last user turn
 // (images as image_url parts, text files appended as context).
 function buildMessages(req: LLMRequest, system: string): unknown[] {
-  const msgs: { role: string; content: unknown }[] = [{ role: 'system', content: system }]
-  req.messages.forEach((m) => msgs.push({ role: m.role, content: m.content }))
-  const atts = req.attachments ?? []
-  if (atts.length && msgs.length > 1) {
-    const last = msgs[msgs.length - 1]
-    const texts = atts.filter((a) => a.kind === 'text')
-    const images = atts.filter((a) => a.kind === 'image' && a.dataUrl)
-    let textPart = String(last.content)
-    for (const f of texts) textPart += `\n\n[Attached file: ${f.name}]\n${(f.text ?? '').slice(0, 20000)}`
-    last.content = images.length
-      ? [{ type: 'text', text: textPart }, ...images.map((im) => ({ type: 'image_url', image_url: { url: im.dataUrl } }))]
-      : textPart
-  }
-  return msgs
+  return [{ role: 'system', content: system }, ...foldAttachments(req.messages, req.attachments)]
+}
+
+// Fold attachments into the LAST user message so any OpenAI-compatible
+// upstream sees them. Images become image_url parts; text files are appended
+// to the user text. The browser carries the file data — server stays stateless.
+export function foldAttachments(
+  messages: Pick<Message, 'role' | 'content'>[],
+  attachments: Attachment[] | undefined,
+): { role: string; content: unknown }[] {
+  const out: { role: string; content: unknown }[] = messages.map((m) => ({ role: m.role, content: m.content }))
+  const atts = attachments ?? []
+  if (!atts.length || !out.length) return out
+  const last = out[out.length - 1]
+  const texts = atts.filter((a) => a.kind === 'text' && (a.text ?? '').length > 0)
+  const images = atts.filter((a) => a.kind === 'image' && a.dataUrl)
+  let textPart = String(last.content ?? '')
+  for (const f of texts) textPart += `\n\n[Attached file: ${f.name}]\n${(f.text ?? '').slice(0, 20000)}`
+  last.content = images.length
+    ? [{ type: 'text', text: textPart }, ...images.map((im) => ({ type: 'image_url', image_url: { url: im.dataUrl } }))]
+    : textPart
+  return out
 }
 
 async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
@@ -204,8 +214,8 @@ export async function streamChat(req: LLMRequest, onToken: (t: string) => void):
       body: JSON.stringify({
         mode: req.mode,
         context: req.context ?? '',
-        messages: req.messages,
-        attachments: req.attachments ?? [],
+        // Fold attachments client-side so the gateway is provider-agnostic.
+        messages: foldAttachments(req.messages, req.attachments),
       }),
       signal: req.signal,
     })

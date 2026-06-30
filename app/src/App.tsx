@@ -95,7 +95,7 @@ export default function App() {
   if (adminRoute && phase === 'app' && profile?.role === 'admin') return <AdminImport onClose={() => { window.location.hash = '' }} />
 
   if (phase === 'loading') {
-    return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)' }} className="mono">Loading {brand.name}…</div>
+    return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)', background: 'var(--paper)' }}>Loading {brand.name}…</div>
   }
   if (phase === 'login') return <Login />
 
@@ -142,22 +142,29 @@ export default function App() {
       {/* Sidebar: fixed column on desktop, slide-in drawer on mobile */}
       {isMobile ? (
         <>
-          {drawerOpen && <div onClick={closeDrawer} style={{ position: 'fixed', inset: 0, background: '#1d1a1655', zIndex: 40 }} />}
-          <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, width: 'min(82vw, 320px)', zIndex: 41, transform: drawerOpen ? 'translateX(0)' : 'translateX(-104%)', transition: 'transform .24s ease', boxShadow: drawerOpen ? '4px 0 24px #0002' : 'none' }}>
+          {drawerOpen && <div onClick={closeDrawer} style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 40 }} />}
+          <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0, width: 'min(82vw, 320px)', zIndex: 41, transform: drawerOpen ? 'translateX(0)' : 'translateX(-104%)', transition: 'transform .24s ease', boxShadow: drawerOpen ? '4px 0 24px rgba(0,0,0,0.18)' : 'none' }}>
             {sidebar}
           </div>
         </>
       ) : <div style={{ width: 264, flex: 'none' }}>{sidebar}</div>}
 
-      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <header style={{ height: 54, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 14px', borderBottom: '1px solid var(--line)', background: '#f6f3ecdd', backdropFilter: 'blur(6px)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--paper-panel)' }}>
+        <header style={{ height: 52, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 8px', background: 'var(--paper-panel)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             {isMobile && (
-              <button onClick={() => setDrawerOpen(true)} aria-label="Menu" style={{ width: 36, height: 36, flex: 'none', border: '1px solid var(--line-strong)', borderRadius: 9, background: '#fff', fontSize: 16, display: 'grid', placeItems: 'center' }}>☰</button>
+              <button onClick={() => setDrawerOpen(true)} aria-label="Open menu" className="mz-icon-btn" style={{ width: 40, height: 40 }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 8h16" /><path d="M4 16h12" /></svg>
+              </button>
             )}
-            <span className="mono" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {brand.sidebarSub}
+            <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {brand.shortName ?? brand.name}
             </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button onClick={() => { newChat(); closeDrawer() }} aria-label="New chat" title="New chat" className="mz-icon-btn" style={{ width: 40, height: 40 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15.5 3.5a2.12 2.12 0 0 1 3 3L7 18l-4 1 1-4Z" /><path d="M14 5l4 4" /></svg>
+            </button>
           </div>
         </header>
 
@@ -181,7 +188,7 @@ export default function App() {
 // Shown only when the network drops — replaces the always-on Live/Slow pill.
 function OfflineToast({ queued }: { queued: number }) {
   return (
-    <div style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 9, background: '#2a2520', color: '#f0ead8', padding: '9px 16px', borderRadius: 999, fontSize: 13, boxShadow: '0 8px 24px #0003', animation: 'mz-rise .3s both' }}>
+    <div style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 9, background: 'var(--ink)', color: 'var(--paper)', padding: '9px 16px', borderRadius: 999, fontSize: 13, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', animation: 'mz-rise .3s both' }}>
       <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger, #d9694a)' }} />
       You’re offline{queued > 0 ? ` — ${queued} message${queued > 1 ? 's' : ''} queued` : ' — messages will send when you reconnect'}
     </div>

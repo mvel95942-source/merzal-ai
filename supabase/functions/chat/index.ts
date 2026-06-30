@@ -88,7 +88,9 @@ function systemPrompt(mode: string, context: string): string {
     mode === 'campus'
       ? "You are a private campus assistant running on the university's own infrastructure. Be concise, helpful, and accurate. Ground answers in the provided campus context when present and make clear the data stays on campus."
       : 'You are Merzal AI, a helpful, concise assistant.'
-  return context ? `${base}\n\nContext:\n${context}` : base
+  const multimodal =
+    ' When the user attaches images or files, read them and reference their contents directly in your answer.'
+  return context ? `${base}${multimodal}\n\nContext:\n${context}` : `${base}${multimodal}`
 }
 
 Deno.serve(async (req) => {
@@ -105,7 +107,9 @@ Deno.serve(async (req) => {
   const { data: userData, error: authErr } = await supabase.auth.getUser()
   if (authErr || !userData.user) return json({ error: 'unauthorized' }, 401)
 
-  let body: { mode?: string; context?: string; messages: { role: string; content: string }[] }
+  // `content` is `string | OpenAIPart[]` — when the user attached images, the
+  // client sends multimodal parts. Pass it through verbatim.
+  let body: { mode?: string; context?: string; messages: { role: string; content: unknown }[] }
   try {
     body = await req.json()
   } catch {
