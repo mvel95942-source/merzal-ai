@@ -65,7 +65,7 @@ export function Login() {
   // Shared form body, reused by the desktop pane and the mobile sheet.
   const form = (
     <div style={{ width: '100%', maxWidth: 372 }}>
-      <h2 className="display" style={{ fontWeight: 400, fontSize: 34, margin: '0 0 5px', letterSpacing: '-.015em', color: '#1a1612' }}>Welcome back</h2>
+      <h2 style={{ fontWeight: 600, fontSize: 30, margin: '0 0 5px', letterSpacing: '-.015em', color: 'var(--ink)' }}>Welcome back</h2>
       <p style={{ fontSize: 14, color: 'var(--muted)', margin: '0 0 22px' }}>
         {stage === 'enrollment' ? 'Sign in with your enrollment number.'
           : stage === 'create' ? 'Create a password for your account.'
@@ -114,13 +114,13 @@ export function Login() {
   if (isMobile) {
     const login = view === 'login'
     return (
-      <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden', background: '#1d1a16' }}>
+      <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden', background: '#0d0d0d' }}>
         {/* Hero — scales + fades back when the sheet is up */}
         <div style={{ position: 'absolute', inset: 0, transition: 'transform .42s cubic-bezier(.32,0,.2,1), opacity .38s ease', transform: login ? 'scale(.95) translateY(-12px)' : 'none', opacity: login ? 0 : 1, pointerEvents: login ? 'none' : 'auto' }}>
           <Hero onSignIn={() => setView('login')} onExplore={explore} />
         </div>
         {/* Login sheet — slides up */}
-        <div style={{ position: 'absolute', inset: 0, background: 'var(--paper-panel)', display: 'flex', flexDirection: 'column', transition: 'transform .44s cubic-bezier(.32,0,.2,1)', transform: login ? 'translateY(0)' : 'translateY(100%)', borderRadius: '22px 22px 0 0', boxShadow: '0 -12px 40px #0004' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'var(--paper-panel)', display: 'flex', flexDirection: 'column', transition: 'transform .44s cubic-bezier(.32,0,.2,1)', transform: login ? 'translateY(0)' : 'translateY(100%)', borderRadius: '22px 22px 0 0', boxShadow: '0 -12px 40px rgba(0,0,0,0.45)' }}>
           <div style={{ padding: '20px 24px 0', flex: 'none' }}>
             <button onClick={() => { setView('hero'); back() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}><span style={{ fontSize: 18 }}>←</span> Back</button>
           </div>
@@ -132,24 +132,24 @@ export function Login() {
 
   // ── Desktop: side-by-side split ──────────────────────────────────────
   return (
-    <div className="login-shell" style={{ minHeight: '100vh', display: 'flex', background: '#1d1a16' }}>
-      <div className="hero-pane" style={{ flex: 1.1, position: 'relative', overflow: 'hidden', color: '#f0ead8', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: 'radial-gradient(120% 100% at 0% 0%, #2a2117 0%, #1d1a16 55%)' }}>
+    <div className="login-shell" style={{ minHeight: '100vh', display: 'flex', background: '#0d0d0d' }}>
+      <div className="hero-pane" style={{ flex: 1.1, position: 'relative', overflow: 'hidden', color: '#ececec', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: 'radial-gradient(120% 100% at 0% 0%, #1e1e1e 0%, #0d0d0d 55%)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
           <Logo size={40} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1 }}>
-            <span style={{ fontFamily: 'var(--font-body)', fontSize: 25, fontWeight: 500, color: '#f0ead8' }}>{brand.name}</span>
-            <span className="mono" style={{ fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: '#8a7c66' }}>{brand.loginBadge}</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 25, fontWeight: 600, color: '#ececec' }}>{brand.name}</span>
+            <span className="mono" style={{ fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: '#8e8e8e' }}>{brand.loginBadge}</span>
           </div>
         </div>
         <div style={{ maxWidth: 480 }}>
           <AnimatedTags tags={brand.loginTags} />
-          <h1 className="display" style={{ fontWeight: 400, fontSize: 46, lineHeight: 1.08, letterSpacing: '-.02em', margin: '0 0 18px' }}>{brand.loginHeroTitle}</h1>
-          <p style={{ fontSize: 16, lineHeight: 1.6, color: '#cabfa9', margin: 0 }}>{brand.loginHeroDesc}</p>
+          <h1 style={{ fontWeight: 600, fontSize: 44, lineHeight: 1.08, letterSpacing: '-.02em', margin: '0 0 18px' }}>{brand.loginHeroTitle}</h1>
+          <p style={{ fontSize: 16, lineHeight: 1.6, color: '#b4b4b4', margin: 0 }}>{brand.loginHeroDesc}</p>
         </div>
-        <div className="mono" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase', color: '#8a7c66' }}>
+        <div className="mono" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase', color: '#8e8e8e' }}>
           {brand.loginFeatures.map((f, i) => (<span key={f} style={{ display: 'flex', gap: 8 }}>{i > 0 && <span style={{ opacity: .3 }}>·</span>}{f}</span>))}
         </div>
-        <div style={{ position: 'absolute', right: -110, bottom: -110, width: 340, height: 340, borderRadius: '50%', border: '1.5px solid #3d2f1e', background: 'radial-gradient(circle,rgba(196,122,53,0.04) 0%,transparent 70%)' }} />
+        <div style={{ position: 'absolute', right: -110, bottom: -110, width: 340, height: 340, borderRadius: '50%', border: '1.5px solid #2a2a2a', background: 'radial-gradient(circle,rgba(255,255,255,0.03) 0%,transparent 70%)' }} />
       </div>
       <div className="login-form-pane" style={{ flex: 1, background: 'var(--paper-panel)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
         <div style={{ animation: 'mz-rise .6s cubic-bezier(.16,1,.3,1) both' }}>{form}</div>
@@ -161,32 +161,32 @@ export function Login() {
 // Full-screen mobile hero with a Sign In button pinned to the bottom.
 function Hero({ onSignIn, onExplore }: { onSignIn: () => void; onExplore: () => void }) {
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', color: '#f0ead8', position: 'relative', overflow: 'hidden', background: 'radial-gradient(125% 100% at 0% 0%, #2a2117 0%, #1d1a16 55%)' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', color: '#ececec', position: 'relative', overflow: 'hidden', background: 'radial-gradient(125% 100% at 0% 0%, #1e1e1e 0%, #0d0d0d 55%)' }}>
       <div style={{ padding: '54px 28px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
         <Logo size={42} />
         <div style={{ lineHeight: 1.1 }}>
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 19, fontWeight: 600, color: '#eae2d6' }}>{brand.name}</div>
-          <div className="mono" style={{ fontSize: 8.5, letterSpacing: '.2em', textTransform: 'uppercase', color: '#8a7c66', marginTop: 2 }}>{brand.loginBadge}</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 19, fontWeight: 600, color: '#ececec' }}>{brand.name}</div>
+          <div className="mono" style={{ fontSize: 8.5, letterSpacing: '.2em', textTransform: 'uppercase', color: '#8e8e8e', marginTop: 2 }}>{brand.loginBadge}</div>
         </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px 28px' }}>
         <AnimatedTags tags={brand.loginTags} />
-        <h1 className="display" style={{ fontWeight: 400, fontSize: 38, lineHeight: 1.12, letterSpacing: '-.02em', margin: '0 0 18px' }}>{brand.loginHeroTitle}</h1>
-        <p style={{ fontSize: 15, lineHeight: 1.65, color: '#cabfa9', margin: 0, maxWidth: 320 }}>{brand.loginHeroDesc}</p>
+        <h1 style={{ fontWeight: 600, fontSize: 36, lineHeight: 1.12, letterSpacing: '-.02em', margin: '0 0 18px' }}>{brand.loginHeroTitle}</h1>
+        <p style={{ fontSize: 15, lineHeight: 1.65, color: '#b4b4b4', margin: 0, maxWidth: 320 }}>{brand.loginHeroDesc}</p>
       </div>
 
       <div style={{ padding: '0 28px 46px' }}>
-        <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #3a2d1a 40%, #3a2d1a 60%, transparent)', marginBottom: 22 }} />
-        <div className="mono" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: '#6f6453', marginBottom: 22 }}>
+        <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #2a2a2a 40%, #2a2a2a 60%, transparent)', marginBottom: 22 }} />
+        <div className="mono" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: '#6e6e6e', marginBottom: 22 }}>
           {brand.loginFeatures.map((f, i) => (<span key={f} style={{ display: 'flex', gap: 8 }}>{i > 0 && <span style={{ opacity: .4 }}>·</span>}{f}</span>))}
         </div>
-        <button onClick={onSignIn} style={{ ...primaryBtn, height: 54, borderRadius: 14, fontSize: 16 }}>Sign In <span style={{ fontSize: 18 }}>→</span></button>
+        <button onClick={onSignIn} style={{ ...primaryBtn, height: 54, borderRadius: 999, fontSize: 16 }}>Sign In <span style={{ fontSize: 18 }}>→</span></button>
         <p style={{ textAlign: 'center', marginTop: 16 }}>
-          <button onClick={onExplore} style={{ border: 'none', background: 'transparent', color: '#8a7c66', fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer' }}>Explore a preview without signing in</button>
+          <button onClick={onExplore} style={{ border: 'none', background: 'transparent', color: '#8e8e8e', fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer' }}>Explore a preview without signing in</button>
         </p>
       </div>
-      <div style={{ position: 'absolute', right: -120, bottom: 80, width: 320, height: 320, borderRadius: '50%', border: '1px solid #3d2f1e', opacity: .6, pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', right: -120, bottom: 80, width: 320, height: 320, borderRadius: '50%', border: '1px solid #2a2a2a', opacity: .6, pointerEvents: 'none' }} />
     </div>
   )
 }
@@ -200,13 +200,13 @@ function AnimatedTags({ tags }: { tags: readonly string[] }) {
   }, [tags.length])
   return (
     <div className="mono" style={{ height: 14, marginBottom: 22, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c47a35', animation: 'mz-pulse 1s infinite' }} />
-      <span key={i} style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: '#c47a35', animation: 'tag-stream 2.2s both' }}>{tags[i]}</span>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ececec', animation: 'mz-pulse 1s infinite' }} />
+      <span key={i} style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: '#b4b4b4', animation: 'tag-stream 2.2s both' }}>{tags[i]}</span>
     </div>
   )
 }
 
-const lbl: React.CSSProperties = { display: 'block', fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase', color: '#9b9488', marginBottom: 8 }
-const field: React.CSSProperties = { width: '100%', height: 48, border: '1px solid var(--line-strong)', borderRadius: 12, background: '#fff', padding: '0 15px', fontSize: 16, color: 'var(--ink)', outline: 'none' }
-const primaryBtn: React.CSSProperties = { width: '100%', height: 50, border: 'none', borderRadius: 13, background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }
+const lbl: React.CSSProperties = { display: 'block', fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }
+const field: React.CSSProperties = { width: '100%', height: 48, border: '1px solid var(--line-strong)', borderRadius: 12, background: 'var(--surface)', padding: '0 15px', fontSize: 16, color: 'var(--ink)', outline: 'none' }
+const primaryBtn: React.CSSProperties = { width: '100%', height: 50, border: 'none', borderRadius: 999, background: 'var(--ink)', color: 'var(--paper)', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }
 const linkBtn: React.CSSProperties = { border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 12.5, cursor: 'pointer', padding: 0 }
