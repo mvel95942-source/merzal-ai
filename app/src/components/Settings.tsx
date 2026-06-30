@@ -30,7 +30,7 @@ export function Settings({ profile, onClose, onSignOut }: {
   }
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: '#1d1a1655' }} />
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--overlay)' }} />
       <div style={{ position: 'relative', width: 'min(460px, 100%)', height: '100%', background: 'var(--paper-panel)', boxShadow: '-20px 0 60px -20px #0004', overflowY: 'auto', animation: 'mz-rise .25s both' }} className="scroll">
         <div style={{ padding: '22px 26px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 className="display" style={{ fontSize: 24, fontWeight: 500, margin: 0 }}>Settings</h2>
@@ -44,7 +44,7 @@ export function Settings({ profile, onClose, onSignOut }: {
           </div>
           {memory.length === 0 && <p style={{ fontSize: 13, color: 'var(--faint)' }}>No memories yet. Things you tell Merzal will be saved here.</p>}
           {memory.map((m) => (
-            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, background: '#fff', marginBottom: 8 }}>
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--surface)', marginBottom: 8 }}>
               <span style={{ flex: 1, fontSize: 13.5 }}>{m.fact}</span>
               <button onClick={() => remove(m.id)} style={{ border: 'none', background: 'transparent', color: 'var(--danger)', fontSize: 12.5 }}>Remove</button>
             </div>
@@ -73,6 +73,6 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
     </div>
   )
 }
-const input: React.CSSProperties = { width: '100%', height: 44, border: '1px solid var(--line-strong)', borderRadius: 10, background: '#fff', padding: '0 13px', fontSize: 14, color: 'var(--ink)', outline: 'none', marginBottom: 0 }
+const input: React.CSSProperties = { width: '100%', height: 44, border: '1px solid var(--line-strong)', borderRadius: 10, background: 'var(--paper-app)', padding: '0 13px', fontSize: 14, color: 'var(--ink)', outline: 'none', marginBottom: 0 }
 const primary: React.CSSProperties = { height: 44, border: 'none', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, padding: '0 18px' }
-const ghost: React.CSSProperties = { height: 42, border: '1px solid var(--line-strong)', borderRadius: 10, background: '#fff', color: 'var(--ink-soft)', fontSize: 13.5, fontWeight: 500, padding: '0 18px' }
+const ghost: React.CSSProperties = { height: 42, border: '1px solid var(--line-strong)', borderRadius: 10, background: 'var(--surface)', color: 'var(--ink-soft)', fontSize: 13.5, fontWeight: 500, padding: '0 18px' }

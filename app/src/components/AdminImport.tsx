@@ -97,7 +97,7 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
     <div style={{ minHeight: '100dvh', background: 'var(--paper-app)' }}>
       <header style={{ height: 54, display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', borderBottom: '1px solid var(--line)' }}>
         <Logo size={26} /><span style={{ fontWeight: 600, fontSize: 15 }}>Merzal AI · Admin</span>
-        <button onClick={onClose} style={{ marginLeft: 'auto', border: '1px solid var(--line-strong)', background: '#fff', borderRadius: 9, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}>← Back to chat</button>
+        <button onClick={onClose} style={{ marginLeft: 'auto', border: '1px solid var(--line-strong)', background: 'var(--surface)', borderRadius: 9, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}>← Back to chat</button>
       </header>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px 60px' }}>
         <h1 className="display" style={{ fontWeight: 400, fontSize: 26, margin: '0 0 6px' }}>Student roster</h1>
@@ -105,16 +105,16 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
 
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: 'none' }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ height: 46, padding: '0 18px', border: '1px dashed var(--line-strong)', borderRadius: 12, background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={() => fileRef.current?.click()} style={{ height: 46, padding: '0 18px', border: '1px dashed var(--line-strong)', borderRadius: 12, background: 'var(--surface)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             ⬆ Choose file{fileName ? ` — ${fileName}` : ''}
           </button>
-          <button onClick={openGuide} style={{ height: 46, padding: '0 18px', border: '1px solid var(--line-strong)', borderRadius: 12, background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={openGuide} style={{ height: 46, padding: '0 18px', border: '1px solid var(--line-strong)', borderRadius: 12, background: 'var(--surface)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             📘 Edit career-guidance knowledge
           </button>
         </div>
 
         {/* Manual add */}
-        <div style={{ marginTop: 18, padding: 14, border: '1px solid var(--line)', borderRadius: 12, background: '#fff' }}>
+        <div style={{ marginTop: 18, padding: 14, border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surface)' }}>
           <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>Add a student manually</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="Name" style={input(160)} />
@@ -126,7 +126,7 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
         {rows.length > 0 && (
           <div style={{ marginTop: 18 }}>
             <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '0 0 8px' }}>{rows.length} valid rows ready to import:</p>
-            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 10, background: '#fff' }}>
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--surface)' }}>
               {rows.slice(0, 100).map((r, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 12px', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
                   <span>{r.name || <i style={{ color: 'var(--faint)' }}>—</i>}</span><span className="mono" style={{ color: 'var(--muted)' }}>{r.mobile}</span>
@@ -146,7 +146,7 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
           <h2 style={{ fontSize: 15, margin: 0 }}>Current roster ({students.length})</h2>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" style={{ ...input(200), height: 34, marginBottom: 0 }} />
         </div>
-        <div style={{ border: '1px solid var(--line)', borderRadius: 10, background: '#fff', overflow: 'hidden' }}>
+        <div style={{ border: '1px solid var(--line)', borderRadius: 10, background: 'var(--surface)', overflow: 'hidden' }}>
           {filtered.length === 0 && <div style={{ padding: 14, color: 'var(--faint)', fontSize: 13 }}>{students.length === 0 ? 'No students yet.' : 'No matches.'}</div>}
           {filtered.slice(0, 300).map((s) => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
@@ -171,7 +171,7 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
             <input autoFocus value={delText} onChange={(e) => setDelText(e.target.value)} placeholder={confirmDel.mobile} style={{ ...input(), fontFamily: 'var(--font-mono, monospace)' }} />
             {delErr && <p style={{ color: 'var(--danger)', fontSize: 12.5, marginTop: 10 }}>{delErr}</p>}
             <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDel(null)} style={{ ...btn(), background: '#fff', color: 'var(--ink)', border: '1px solid var(--line-strong)' }}>Cancel</button>
+              <button onClick={() => setConfirmDel(null)} style={{ ...btn(), background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--line-strong)' }}>Cancel</button>
               <button onClick={confirmDelete} disabled={delText.trim() !== confirmDel.mobile} style={{ ...btn(), background: 'var(--danger)', opacity: delText.trim() === confirmDel.mobile ? 1 : .5 }}>Delete</button>
             </div>
           </div>
@@ -190,7 +190,7 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
             <textarea value={guide.content} onChange={(e) => setGuide({ ...guide, content: e.target.value })} placeholder="# Career guidance&#10;&#10;Add your campus-specific guidance here…" rows={16} style={{ ...input(), height: 320, resize: 'vertical', fontFamily: 'var(--font-mono, monospace)', fontSize: 13, padding: '10px 12px' }} />
             {guideSaved && <p style={{ color: 'var(--accent)', fontSize: 13, margin: '6px 0 0' }}>Saved.</p>}
             <div style={{ display: 'flex', gap: 10, marginTop: 14, justifyContent: 'flex-end' }}>
-              <button onClick={() => setGuideOpen(false)} style={{ ...btn(), background: '#fff', color: 'var(--ink)', border: '1px solid var(--line-strong)' }}>Close</button>
+              <button onClick={() => setGuideOpen(false)} style={{ ...btn(), background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--line-strong)' }}>Close</button>
               <button onClick={saveGuide} style={btn()}>Save</button>
             </div>
           </div>
@@ -200,10 +200,10 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
   )
 }
 
-const input = (w?: number): React.CSSProperties => ({ flex: w ? undefined : 1, width: w, minWidth: 140, height: 40, border: '1px solid var(--line-strong)', borderRadius: 9, background: '#fff', padding: '0 12px', fontSize: 14, color: 'var(--ink)', outline: 'none', marginBottom: 10 })
+const input = (w?: number): React.CSSProperties => ({ flex: w ? undefined : 1, width: w, minWidth: 140, height: 40, border: '1px solid var(--line-strong)', borderRadius: 9, background: 'var(--paper-app)', padding: '0 12px', fontSize: 14, color: 'var(--ink)', outline: 'none', marginBottom: 10 })
 const btn = (): React.CSSProperties => ({ height: 40, padding: '0 16px', border: 'none', borderRadius: 9, background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' })
-const modalBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: '#1d1a1688', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: 16 }
-const modalCard: React.CSSProperties = { width: '100%', maxWidth: 460, background: 'var(--paper-panel, #f6f3ec)', borderRadius: 14, padding: 22, boxShadow: '0 20px 60px #0003' }
+const modalBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: 16 }
+const modalCard: React.CSSProperties = { width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 22, boxShadow: 'var(--shadow-pop)' }
 
 // Flexible header matching for the two required columns.
 function pickRow(o: Record<string, unknown>): Row | null {
