@@ -26,6 +26,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [queued, setQueued] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(true) // desktop sidebar collapse (mobile-first: hideable)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
   const [hash, setHash] = useState(typeof window !== 'undefined' ? window.location.hash : '')
   const conn = useConnection()
@@ -147,16 +148,16 @@ export default function App() {
             {sidebar}
           </div>
         </>
-      ) : <div style={{ width: 264, flex: 'none' }}>{sidebar}</div>}
+      ) : (
+        <div style={{ width: navOpen ? 264 : 0, flex: 'none', overflow: 'hidden', transition: 'width .22s ease' }}>{sidebar}</div>
+      )}
 
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--paper-panel)' }}>
         <header style={{ height: 52, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 8px', background: 'var(--paper-panel)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            {isMobile && (
-              <button onClick={() => setDrawerOpen(true)} aria-label="Open menu" className="mz-icon-btn" style={{ width: 40, height: 40 }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 8h16" /><path d="M4 16h12" /></svg>
-              </button>
-            )}
+            <button onClick={() => (isMobile ? setDrawerOpen(true) : setNavOpen((v) => !v))} aria-label={isMobile ? 'Open menu' : navOpen ? 'Hide sidebar' : 'Show sidebar'} title={isMobile ? 'Menu' : navOpen ? 'Hide sidebar' : 'Show sidebar'} className="mz-icon-btn" style={{ width: 40, height: 40 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 8h16" /><path d="M4 16h12" /></svg>
+            </button>
             <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {brand.shortName ?? brand.name}
             </span>
