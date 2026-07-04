@@ -23,13 +23,16 @@ const DEFAULT_MODEL: Record<ProviderId, string> = {
   openrouter: 'openai/gpt-4o-mini',
   litellm: 'gpt-4o-mini',
   vllm: 'llama3',
+  aicredits: 'deepseek/deepseek-v4-flash',
 }
 
 // Map a chat mode to the provider + model the admin configured for it.
 function routeForMode(mode: string): { provider: ProviderId; model: string } {
   const prefix = mode === 'world' ? 'WORLD' : 'CAMPUS'
-  const provider = (Deno.env.get(`${prefix}_PROVIDER`) as ProviderId) || 'openai'
-  const model = Deno.env.get(`${prefix}_MODEL`) || DEFAULT_MODEL[provider] || 'gpt-4o-mini'
+  // Default to AICredits → DeepSeek V4 Flash; override per mode with
+  // CAMPUS_PROVIDER / CAMPUS_MODEL / WORLD_PROVIDER / WORLD_MODEL secrets.
+  const provider = (Deno.env.get(`${prefix}_PROVIDER`) as ProviderId) || 'aicredits'
+  const model = Deno.env.get(`${prefix}_MODEL`) || DEFAULT_MODEL[provider] || 'deepseek/deepseek-v4-flash'
   return { provider, model }
 }
 
@@ -39,7 +42,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-type ProviderId = 'openai' | 'deepseek' | 'gemini' | 'openrouter' | 'litellm' | 'vllm'
+type ProviderId = 'openai' | 'deepseek' | 'gemini' | 'openrouter' | 'litellm' | 'vllm' | 'aicredits'
 
 interface Upstream {
   base: string
@@ -62,6 +65,12 @@ function resolveProvider(p: ProviderId): Upstream | { error: string } {
       return env('GEMINI_API_KEY')
         ? { base: 'https://generativelanguage.googleapis.com/v1beta/openai', key: env('GEMINI_API_KEY') }
         : { error: 'GEMINI_API_KEY not set' }
+    case 'aicredits':
+      // AICredits OpenAI-compatible aggregator (https://aicredits.in). Set the
+      // key as a Supabase secret; pick the model via CAMPUS_MODEL / WORLD_MODEL.
+      return env('AICREDITS_API_KEY')
+        ? { base: 'https://aicredits.in/v1', key: env('AICREDITS_API_KEY') }
+        : { error: 'AICREDITS_API_KEY not set' }
     case 'openrouter':
       return env('OPENROUTER_API_KEY')
         ? {

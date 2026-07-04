@@ -4,7 +4,7 @@
 // from the browser. Falls back to a built-in stub so the chat UX always works.
 import { supabase, hasSupabase } from './supabase'
 import { isDemo } from './demo'
-import { deviceId, setPreviewRemaining } from './preview'
+import { deviceId, previewRemaining, setPreviewRemaining } from './preview'
 import { stripThoughts } from './format'
 import type { ChatMode, Message } from './types'
 
@@ -37,6 +37,17 @@ async function streamPreview(req: LLMRequest, onToken: (t: string) => void): Pro
   return streamOpenAISSE(res, onToken)
 }
 
+// ── Custom OpenAI-compatible gateway (AICredits → DeepSeek V4 Flash) ──────
+// When VITE_AI_BASE_URL + VITE_AI_API_KEY are set (local .env.local), the app
+// streams directly from that gateway for every mode. The key comes from env —
+// it is NEVER hardcoded. For the HOSTED site, leave these unset and route
+// through the `chat` edge function instead, so the key stays server-side.
+const AI_BASE = (import.meta.env.VITE_AI_BASE_URL as string | undefined)?.replace(/\/$/, '')
+const AI_KEY = import.meta.env.VITE_AI_API_KEY as string | undefined
+const AI_MODELS = ((import.meta.env.VITE_AI_MODEL as string) || 'deepseek/deepseek-v4-flash')
+  .split(',').map((s) => s.trim()).filter(Boolean)
+const hasAiGateway = !!(AI_BASE && AI_KEY)
+
 // Preview mode: call the Gemini/Gemma OpenAI-compatible endpoint directly from
 // the browser (key in VITE_GEMINI_API_KEY). Dev-only.
 const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
@@ -65,16 +76,19 @@ const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`
 
 // Compose the API message array, folding attachments into the last user turn
 // (images as image_url parts, text files appended as context).
-function buildMessages(req: LLMRequest, system: string): unknown[] {
-  return [{ role: 'system', content: system }, ...foldAttachments(req.messages, req.attachments)]
+function buildMessages(req: LLMRequest, system: string, vision = true): unknown[] {
+  return [{ role: 'system', content: system }, ...foldAttachments(req.messages, req.attachments, vision)]
 }
 
 // Fold attachments into the LAST user message so any OpenAI-compatible
-// upstream sees them. Images become image_url parts; text files are appended
-// to the user text. The browser carries the file data — server stays stateless.
+// upstream sees them. On vision models images become image_url parts; text
+// files are always appended as context. On text-only models (vision=false)
+// images are replaced by a short note so the request never 400s.
+// The browser carries the file data — the server stays stateless.
 export function foldAttachments(
   messages: Pick<Message, 'role' | 'content'>[],
   attachments: Attachment[] | undefined,
+  vision = true,
 ): { role: string; content: unknown }[] {
   const out: { role: string; content: unknown }[] = messages.map((m) => ({ role: m.role, content: m.content }))
   const atts = attachments ?? []
@@ -84,10 +98,53 @@ export function foldAttachments(
   const images = atts.filter((a) => a.kind === 'image' && a.dataUrl)
   let textPart = String(last.content ?? '')
   for (const f of texts) textPart += `\n\n[Attached file: ${f.name}]\n${(f.text ?? '').slice(0, 20000)}`
+  if (!vision) {
+    if (images.length) textPart += `\n\n[${images.length} image${images.length > 1 ? 's' : ''} attached — the current model can't view images, so describe them in text if you need help.]`
+    last.content = textPart
+    return out
+  }
   last.content = images.length
     ? [{ type: 'text', text: textPart }, ...images.map((im) => ({ type: 'image_url', image_url: { url: im.dataUrl } }))]
     : textPart
   return out
+}
+
+// Stream from the custom OpenAI-compatible gateway (AICredits / DeepSeek).
+// DeepSeek V4 Flash is a reasoning model: its <thought> / reasoning_content is
+// kept out of the visible stream by streamOpenAISSE (which only reads
+// delta.content). Models are tried in order; 429/5xx falls through to the next.
+async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  const base =
+    req.mode === 'campus'
+      ? 'You are a private campus assistant. Be concise, helpful, and accurate.'
+      : 'You are a helpful, concise assistant.'
+  const system =
+    base +
+    ' Use the conversation so far to stay consistent and remember what the user told you (their name, what they study, preferences).' +
+    ' When the user attaches text files, read them and reference their content directly.' +
+    (req.context ? `\n\n${req.context}` : '')
+  let lastStatus = 0
+  for (const model of AI_MODELS) {
+    if (req.signal?.aborted) throw new Error('aborted')
+    let res: Response
+    try {
+      res = await fetch(`${AI_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI_KEY}` },
+        // vision=false: DeepSeek is text-only, so images fold to a text note.
+        body: JSON.stringify({ model, stream: true, messages: buildMessages(req, system, false) }),
+        signal: req.signal,
+      })
+    } catch { lastStatus = 0; continue }
+    if (res.ok && res.body) return streamOpenAISSE(res, onToken)
+    lastStatus = res.status
+    if (res.status === 429 || res.status >= 500) continue // fall through to next model
+    return note(req, onToken, `The model returned an error (${res.status}). Check the AICredits key / model.`)
+  }
+  return note(req, onToken,
+    lastStatus === 429
+      ? 'The model is rate-limited right now. Wait a moment and try again.'
+      : `The model is unavailable (${lastStatus}). Try again in a moment.`)
 }
 
 async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
@@ -195,6 +252,20 @@ async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Pro
 }
 
 export async function streamChat(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  // AICredits / DeepSeek gateway powers the app when configured (local dev via
+  // .env.local). Anonymous preview keeps its per-device daily cap; signed-in
+  // users are uncapped.
+  if (hasAiGateway) {
+    if (isDemo()) {
+      if (previewRemaining() <= 0) {
+        return note(req, onToken, "You've used all 10 free preview messages for today — they reset tomorrow. Sign in with your enrollment number to keep chatting now.")
+      }
+      const full = await streamAiGateway(req, onToken)
+      setPreviewRemaining(previewRemaining() - 1)
+      return full
+    }
+    return streamAiGateway(req, onToken)
+  }
   // Preview (no login): capped anonymous gateway with real answers.
   if (isDemo()) return streamPreview(req, onToken)
   // Local dev with a browser key: answer directly. In production no key is in
