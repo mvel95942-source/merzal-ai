@@ -92,6 +92,43 @@ function resolveProvider(p: ProviderId): Upstream | { error: string } {
   }
 }
 
+// True when any turn carries an OpenAI-style image_url content part.
+function hasImageParts(messages: { role: string; content: unknown }[]): boolean {
+  return messages.some((m) =>
+    Array.isArray(m.content) &&
+    (m.content as { type?: string }[]).some((p) => p?.type === 'image_url'))
+}
+
+// PageIndex streams agentic tool-use inside delta.content (block_metadata.type
+// !== 'text'). This TransformStream forwards ONLY the final answer text,
+// re-emitted as standard OpenAI SSE so the browser parser handles it unchanged.
+function pageIndexTextFilter(): TransformStream<Uint8Array, Uint8Array> {
+  const dec = new TextDecoder()
+  const enc = new TextEncoder()
+  let buf = ''
+  return new TransformStream({
+    transform(chunk, controller) {
+      buf += dec.decode(chunk, { stream: true })
+      const parts = buf.split('\n\n')
+      buf = parts.pop() ?? ''
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data:')) continue
+        const payload = line.slice(5).trim()
+        if (payload === '[DONE]') { controller.enqueue(enc.encode('data: [DONE]\n\n')); continue }
+        try {
+          const j = JSON.parse(payload)
+          const tok: string = j.choices?.[0]?.delta?.content ?? ''
+          if (tok && j.block_metadata?.type === 'text') {
+            controller.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: tok } }] })}\n\n`))
+          }
+        } catch { /* ignore keep-alives / non-JSON */ }
+      }
+    },
+    flush(controller) { controller.enqueue(enc.encode('data: [DONE]\n\n')) },
+  })
+}
+
 function systemPrompt(mode: string, context: string): string {
   const base =
     mode === 'campus'
@@ -128,8 +165,41 @@ Deno.serve(async (req) => {
   const { mode = 'campus', context = '', messages } = body
   if (!Array.isArray(messages) || messages.length === 0) return json({ error: 'messages required' }, 400)
 
+  // Campus mode: PageIndex reasoning RAG when configured (grounded answers over
+  // the indexed campus doc). Text-only, so skip when the turn carries images.
+  const PI_KEY = Deno.env.get('PAGEINDEX_API_KEY')
+  const PI_DOC = Deno.env.get('PAGEINDEX_DOC_ID')
+  if (mode === 'campus' && PI_KEY && PI_DOC && !hasImageParts(messages)) {
+    const docs = PI_DOC.includes(',') ? PI_DOC.split(',').map((s) => s.trim()).filter(Boolean) : PI_DOC
+    const piMessages = [{ role: 'system', content: systemPrompt(mode, context) }, ...messages.map((m) => ({ role: m.role, content: m.content }))]
+    let up: Response
+    try {
+      up = await fetch('https://api.pageindex.ai/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', api_key: PI_KEY },
+        body: JSON.stringify({ doc_id: docs, stream: true, messages: piMessages }),
+      })
+    } catch (e) {
+      return json({ error: `pageindex fetch failed: ${e}` }, 502)
+    }
+    if (!up.ok || !up.body) {
+      const detail = await up.text().catch(() => '')
+      return json({ error: `pageindex ${up.status}`, detail: detail.slice(0, 300) }, 502)
+    }
+    // Filter PageIndex's agentic tool-use out; re-emit only the answer text.
+    return new Response(up.body.pipeThrough(pageIndexTextFilter()), {
+      headers: { ...CORS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
+    })
+  }
+
   // Backend decides which provider + model serves this mode.
-  const { provider, model } = routeForMode(mode)
+  let { provider, model } = routeForMode(mode)
+  // Image requests can't run on a text-only model (e.g. DeepSeek V4 Flash), so
+  // route them to Gemini vision when GEMINI_API_KEY is available.
+  if (hasImageParts(messages) && Deno.env.get('GEMINI_API_KEY')) {
+    provider = 'gemini'
+    model = Deno.env.get('VISION_MODEL') || 'gemini-2.0-flash'
+  }
   const up = resolveProvider(provider)
   if ('error' in up) return json({ error: up.error }, 501) // 501 → client uses stub
 

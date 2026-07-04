@@ -48,11 +48,25 @@ const AI_MODELS = ((import.meta.env.VITE_AI_MODEL as string) || 'deepseek/deepse
   .split(',').map((s) => s.trim()).filter(Boolean)
 const hasAiGateway = !!(AI_BASE && AI_KEY)
 
+// ── PageIndex (reasoning RAG for Campus mode) ────────────────────────────
+// When configured, Campus-mode questions are answered by PageIndex's Chat API,
+// which reasons over the indexed campus document(s) and returns a grounded
+// answer. Key from env, never hardcoded. VITE_PAGEINDEX_DOC_ID may be a single
+// id or a comma-separated list. For the hosted site prefer the edge function.
+const PAGEINDEX_KEY = import.meta.env.VITE_PAGEINDEX_API_KEY as string | undefined
+const PAGEINDEX_BASE = ((import.meta.env.VITE_PAGEINDEX_BASE_URL as string) || 'https://api.pageindex.ai').replace(/\/$/, '')
+const PAGEINDEX_DOC = (import.meta.env.VITE_PAGEINDEX_DOC_ID as string | undefined)?.trim()
+const hasPageIndex = !!(PAGEINDEX_KEY && PAGEINDEX_DOC)
+
 // Preview mode: call the Gemini/Gemma OpenAI-compatible endpoint directly from
 // the browser (key in VITE_GEMINI_API_KEY). Dev-only.
 const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
 // Comma-separated fallback list. On 429/500/upstream error we try the next.
 const GEMINI_MODELS = ((import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.5-flash,gemini-2.0-flash')
+  .split(',').map((s) => s.trim()).filter(Boolean)
+// Image requests route here. Gemma isn't reliably multimodal, so vision uses
+// Gemini flash models by default (override with VITE_GEMINI_VISION_MODEL).
+const GEMINI_VISION_MODELS = ((import.meta.env.VITE_GEMINI_VISION_MODEL as string) || 'gemini-2.5-flash,gemini-2.0-flash')
   .split(',').map((s) => s.trim()).filter(Boolean)
 
 // An uploaded file/image attached to the latest user turn.
@@ -147,7 +161,63 @@ async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void): P
       : `The model is unavailable (${lastStatus}). Try again in a moment.`)
 }
 
-async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+// Campus mode via PageIndex Chat API — reasoning retrieval over the indexed
+// campus doc(s). Falls back to the normal engine on any error so chat never
+// dead-ends.
+async function streamPageIndex(
+  req: LLMRequest,
+  onToken: (t: string) => void,
+  fallback: (r: LLMRequest, o: (t: string) => void) => Promise<string>,
+): Promise<string> {
+  const docs = PAGEINDEX_DOC!.includes(',') ? PAGEINDEX_DOC!.split(',').map((s) => s.trim()).filter(Boolean) : PAGEINDEX_DOC!
+  // PageIndex answers from the doc; pass conversation text + any memory context.
+  const history = foldAttachments(req.messages, req.attachments, false)
+    .map((m) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : String(m.content) }))
+  const messages = req.context ? [{ role: 'system', content: req.context }, ...history] : history
+  let res: Response
+  try {
+    res = await fetch(`${PAGEINDEX_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', api_key: PAGEINDEX_KEY! },
+      body: JSON.stringify({ doc_id: docs, stream: true, messages }),
+      signal: req.signal,
+    })
+  } catch {
+    return fallback(req, onToken) // network error → answer without grounding
+  }
+  if (!res.ok || !res.body) return fallback(req, onToken)
+  return streamPageIndexSSE(res, onToken)
+}
+
+// PageIndex streams its agentic tool-use (page reads) inside delta.content too,
+// tagged block_metadata.type !== 'text'. Surface ONLY the final answer text.
+async function streamPageIndexSSE(res: Response, onToken: (t: string) => void): Promise<string> {
+  const reader = res.body!.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  let out = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const parts = buf.split('\n\n')
+    buf = parts.pop() ?? ''
+    for (const part of parts) {
+      const line = part.trim()
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (payload === '[DONE]') return out
+      try {
+        const json = JSON.parse(payload)
+        const tok: string = json.choices?.[0]?.delta?.content ?? ''
+        if (tok && json.block_metadata?.type === 'text') { out += tok; onToken(tok) }
+      } catch { /* ignore keep-alives / non-JSON */ }
+    }
+  }
+  return out
+}
+
+async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void, models: string[] = GEMINI_MODELS): Promise<string> {
   if (!GEMINI_KEY) return stub(req, onToken)
   const base =
     req.mode === 'campus'
@@ -160,7 +230,7 @@ async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void)
     (req.context ? `\n\n${req.context}` : '')
   // Try each model in order; fall through on 429 (quota) or 5xx (transient).
   let lastStatus = 0
-  for (const model of GEMINI_MODELS) {
+  for (const model of models) {
     if (req.signal?.aborted) throw new Error('aborted')
     let res: Response
     try {
@@ -252,25 +322,34 @@ async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Pro
 }
 
 export async function streamChat(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
-  // AICredits / DeepSeek gateway powers the app when configured (local dev via
-  // .env.local). Anonymous preview keeps its per-device daily cap; signed-in
-  // users are uncapped.
-  if (hasAiGateway) {
+  const hasImages = (req.attachments ?? []).some((a) => a.kind === 'image' && a.dataUrl)
+
+  // Engine selection (local dev with browser keys in .env.local):
+  //   • images        → Gemini vision (DeepSeek V4 Flash is text-only)
+  //   • Campus + docs  → PageIndex reasoning RAG (grounded campus answers)
+  //   • text          → AICredits / DeepSeek V4 Flash
+  //   • else          → Gemini as a legacy fallback
+  const textEngine: ((r: LLMRequest, o: (t: string) => void) => Promise<string>) | null =
+    hasAiGateway ? streamAiGateway : GEMINI_KEY ? streamGeminiDirect : null
+  let engine: ((r: LLMRequest, o: (t: string) => void) => Promise<string>) | null = null
+  if (hasImages && GEMINI_KEY) engine = (r, o) => streamGeminiDirect(r, o, GEMINI_VISION_MODELS)
+  else if (req.mode === 'campus' && hasPageIndex) engine = (r, o) => streamPageIndex(r, o, textEngine ?? stub)
+  else engine = textEngine
+
+  if (engine) {
+    // Anonymous preview keeps its per-device daily cap; signed-in users uncapped.
     if (isDemo()) {
       if (previewRemaining() <= 0) {
         return note(req, onToken, "You've used all 10 free preview messages for today — they reset tomorrow. Sign in with your enrollment number to keep chatting now.")
       }
-      const full = await streamAiGateway(req, onToken)
+      const full = await engine(req, onToken)
       setPreviewRemaining(previewRemaining() - 1)
       return full
     }
-    return streamAiGateway(req, onToken)
+    return engine(req, onToken)
   }
-  // Preview (no login): capped anonymous gateway with real answers.
+  // Preview (no login), no local key: capped anonymous gateway with real answers.
   if (isDemo()) return streamPreview(req, onToken)
-  // Local dev with a browser key: answer directly. In production no key is in
-  // the bundle, so signed-in users fall through to the secure edge function.
-  if (GEMINI_KEY) return streamGeminiDirect(req, onToken)
   if (!hasSupabase) return stub(req, onToken)
   try {
     const { data } = await supabase.auth.getSession()
