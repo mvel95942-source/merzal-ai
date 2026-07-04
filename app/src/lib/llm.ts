@@ -48,15 +48,10 @@ const AI_MODELS = ((import.meta.env.VITE_AI_MODEL as string) || 'deepseek/deepse
   .split(',').map((s) => s.trim()).filter(Boolean)
 const hasAiGateway = !!(AI_BASE && AI_KEY)
 
-// ── PageIndex (reasoning RAG for Campus mode) ────────────────────────────
-// When configured, Campus-mode questions are answered by PageIndex's Chat API,
-// which reasons over the indexed campus document(s) and returns a grounded
-// answer. Key from env, never hardcoded. VITE_PAGEINDEX_DOC_ID may be a single
-// id or a comma-separated list. For the hosted site prefer the edge function.
-const PAGEINDEX_KEY = import.meta.env.VITE_PAGEINDEX_API_KEY as string | undefined
-const PAGEINDEX_BASE = ((import.meta.env.VITE_PAGEINDEX_BASE_URL as string) || 'https://api.pageindex.ai').replace(/\/$/, '')
-const PAGEINDEX_DOC = (import.meta.env.VITE_PAGEINDEX_DOC_ID as string | undefined)?.trim()
-const hasPageIndex = !!(PAGEINDEX_KEY && PAGEINDEX_DOC)
+// Note: PageIndex is used for RETRIEVAL only now (see lib/knowledge.ts), which
+// fetches indexed campus doc content and injects it as `req.context`. DeepSeek
+// (via streamAiGateway below) writes every answer, Campus included — there is
+// no separate PageIndex chat engine anymore.
 
 // Preview mode: call the Gemini/Gemma OpenAI-compatible endpoint directly from
 // the browser (key in VITE_GEMINI_API_KEY). Dev-only.
@@ -159,62 +154,6 @@ async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void): P
     lastStatus === 429
       ? 'The model is rate-limited right now. Wait a moment and try again.'
       : `The model is unavailable (${lastStatus}). Try again in a moment.`)
-}
-
-// Campus mode via PageIndex Chat API — reasoning retrieval over the indexed
-// campus doc(s). Falls back to the normal engine on any error so chat never
-// dead-ends.
-async function streamPageIndex(
-  req: LLMRequest,
-  onToken: (t: string) => void,
-  fallback: (r: LLMRequest, o: (t: string) => void) => Promise<string>,
-): Promise<string> {
-  const docs = PAGEINDEX_DOC!.includes(',') ? PAGEINDEX_DOC!.split(',').map((s) => s.trim()).filter(Boolean) : PAGEINDEX_DOC!
-  // PageIndex answers from the doc; pass conversation text + any memory context.
-  const history = foldAttachments(req.messages, req.attachments, false)
-    .map((m) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : String(m.content) }))
-  const messages = req.context ? [{ role: 'system', content: req.context }, ...history] : history
-  let res: Response
-  try {
-    res = await fetch(`${PAGEINDEX_BASE}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', api_key: PAGEINDEX_KEY! },
-      body: JSON.stringify({ doc_id: docs, stream: true, messages }),
-      signal: req.signal,
-    })
-  } catch {
-    return fallback(req, onToken) // network error → answer without grounding
-  }
-  if (!res.ok || !res.body) return fallback(req, onToken)
-  return streamPageIndexSSE(res, onToken)
-}
-
-// PageIndex streams its agentic tool-use (page reads) inside delta.content too,
-// tagged block_metadata.type !== 'text'. Surface ONLY the final answer text.
-async function streamPageIndexSSE(res: Response, onToken: (t: string) => void): Promise<string> {
-  const reader = res.body!.getReader()
-  const dec = new TextDecoder()
-  let buf = ''
-  let out = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += dec.decode(value, { stream: true })
-    const parts = buf.split('\n\n')
-    buf = parts.pop() ?? ''
-    for (const part of parts) {
-      const line = part.trim()
-      if (!line.startsWith('data:')) continue
-      const payload = line.slice(5).trim()
-      if (payload === '[DONE]') return out
-      try {
-        const json = JSON.parse(payload)
-        const tok: string = json.choices?.[0]?.delta?.content ?? ''
-        if (tok && json.block_metadata?.type === 'text') { out += tok; onToken(tok) }
-      } catch { /* ignore keep-alives / non-JSON */ }
-    }
-  }
-  return out
 }
 
 async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void, models: string[] = GEMINI_MODELS): Promise<string> {
@@ -325,15 +264,15 @@ export async function streamChat(req: LLMRequest, onToken: (t: string) => void):
   const hasImages = (req.attachments ?? []).some((a) => a.kind === 'image' && a.dataUrl)
 
   // Engine selection (local dev with browser keys in .env.local):
-  //   • images        → Gemini vision (DeepSeek V4 Flash is text-only)
-  //   • Campus + docs  → PageIndex reasoning RAG (grounded campus answers)
-  //   • text          → AICredits / DeepSeek V4 Flash
-  //   • else          → Gemini as a legacy fallback
+  //   • images → Gemini vision (DeepSeek V4 Flash is text-only)
+  //   • text   → AICredits / DeepSeek V4 Flash (Campus included — PageIndex
+  //              only retrieves grounding context, injected via req.context
+  //              by lib/knowledge.ts; DeepSeek always writes the answer)
+  //   • else   → Gemini as a legacy fallback
   const textEngine: ((r: LLMRequest, o: (t: string) => void) => Promise<string>) | null =
     hasAiGateway ? streamAiGateway : GEMINI_KEY ? streamGeminiDirect : null
   let engine: ((r: LLMRequest, o: (t: string) => void) => Promise<string>) | null = null
   if (hasImages && GEMINI_KEY) engine = (r, o) => streamGeminiDirect(r, o, GEMINI_VISION_MODELS)
-  else if (req.mode === 'campus' && hasPageIndex) engine = (r, o) => streamPageIndex(r, o, textEngine ?? stub)
   else engine = textEngine
 
   if (engine) {

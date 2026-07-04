@@ -99,34 +99,25 @@ function hasImageParts(messages: { role: string; content: unknown }[]): boolean 
     (m.content as { type?: string }[]).some((p) => p?.type === 'image_url'))
 }
 
-// PageIndex streams agentic tool-use inside delta.content (block_metadata.type
-// !== 'text'). This TransformStream forwards ONLY the final answer text,
-// re-emitted as standard OpenAI SSE so the browser parser handles it unchanged.
-function pageIndexTextFilter(): TransformStream<Uint8Array, Uint8Array> {
-  const dec = new TextDecoder()
-  const enc = new TextEncoder()
-  let buf = ''
-  return new TransformStream({
-    transform(chunk, controller) {
-      buf += dec.decode(chunk, { stream: true })
-      const parts = buf.split('\n\n')
-      buf = parts.pop() ?? ''
-      for (const part of parts) {
-        const line = part.trim()
-        if (!line.startsWith('data:')) continue
-        const payload = line.slice(5).trim()
-        if (payload === '[DONE]') { controller.enqueue(enc.encode('data: [DONE]\n\n')); continue }
-        try {
-          const j = JSON.parse(payload)
-          const tok: string = j.choices?.[0]?.delta?.content ?? ''
-          if (tok && j.block_metadata?.type === 'text') {
-            controller.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: tok } }] })}\n\n`))
-          }
-        } catch { /* ignore keep-alives / non-JSON */ }
-      }
-    },
-    flush(controller) { controller.enqueue(enc.encode('data: [DONE]\n\n')) },
-  })
+// PageIndex is used for RETRIEVAL only: pull the indexed campus doc content and
+// return it as grounding context. DeepSeek (the routed provider) writes the
+// answer. type=ocr returns the document markdown per page (result[].markdown).
+async function pageIndexContext(key: string, docIds: string): Promise<string> {
+  const docs = docIds.split(',').map((s) => s.trim()).filter(Boolean)
+  const parts: string[] = []
+  for (const doc of docs) {
+    try {
+      const res = await fetch(`https://api.pageindex.ai/doc/${doc}/?type=ocr`, { headers: { api_key: key } })
+      if (!res.ok) continue
+      const json = await res.json()
+      const pages = json.result ?? []
+      const md = (Array.isArray(pages) ? pages : [pages])
+        .map((p: { markdown?: string; text?: string }) => (p.markdown ?? p.text ?? '').trim())
+        .filter(Boolean).join('\n\n')
+      if (md) parts.push(md)
+    } catch { /* skip this doc on error */ }
+  }
+  return parts.join('\n\n---\n\n').slice(0, 60_000).trim()
 }
 
 function systemPrompt(mode: string, context: string): string {
@@ -165,31 +156,18 @@ Deno.serve(async (req) => {
   const { mode = 'campus', context = '', messages } = body
   if (!Array.isArray(messages) || messages.length === 0) return json({ error: 'messages required' }, 400)
 
-  // Campus mode: PageIndex reasoning RAG when configured (grounded answers over
-  // the indexed campus doc). Text-only, so skip when the turn carries images.
+  // Campus mode: PageIndex RETRIEVES the indexed campus content; DeepSeek (the
+  // routed provider) writes the answer. Grounding is folded into the context.
+  // Text-only, so skip when the turn carries images.
+  let groundedContext = context
   const PI_KEY = Deno.env.get('PAGEINDEX_API_KEY')
   const PI_DOC = Deno.env.get('PAGEINDEX_DOC_ID')
   if (mode === 'campus' && PI_KEY && PI_DOC && !hasImageParts(messages)) {
-    const docs = PI_DOC.includes(',') ? PI_DOC.split(',').map((s) => s.trim()).filter(Boolean) : PI_DOC
-    const piMessages = [{ role: 'system', content: systemPrompt(mode, context) }, ...messages.map((m) => ({ role: m.role, content: m.content }))]
-    let up: Response
-    try {
-      up = await fetch('https://api.pageindex.ai/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', api_key: PI_KEY },
-        body: JSON.stringify({ doc_id: docs, stream: true, messages: piMessages }),
-      })
-    } catch (e) {
-      return json({ error: `pageindex fetch failed: ${e}` }, 502)
+    const campusDoc = await pageIndexContext(PI_KEY, PI_DOC)
+    if (campusDoc) {
+      groundedContext = [context, `Campus knowledge — answer from this document; if it isn't covered here, say you don't have that information:\n${campusDoc}`]
+        .filter(Boolean).join('\n\n')
     }
-    if (!up.ok || !up.body) {
-      const detail = await up.text().catch(() => '')
-      return json({ error: `pageindex ${up.status}`, detail: detail.slice(0, 300) }, 502)
-    }
-    // Filter PageIndex's agentic tool-use out; re-emit only the answer text.
-    return new Response(up.body.pipeThrough(pageIndexTextFilter()), {
-      headers: { ...CORS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
-    })
   }
 
   // Backend decides which provider + model serves this mode.
@@ -206,7 +184,7 @@ Deno.serve(async (req) => {
   const payload = {
     model,
     stream: true,
-    messages: [{ role: 'system', content: systemPrompt(mode, context) }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
+    messages: [{ role: 'system', content: systemPrompt(mode, groundedContext) }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
   }
 
   let upstream: Response
