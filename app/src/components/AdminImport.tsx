@@ -24,10 +24,41 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
   const [guideOpen, setGuideOpen] = useState(false)
   const [guide, setGuide] = useState<{ id?: string; title: string; content: string }>({ title: 'Career guidance', content: '' })
   const [guideSaved, setGuideSaved] = useState(false)
+  const docFileRef = useRef<HTMLInputElement>(null)
+  const [docs, setDocs] = useState<{ id: string; doc_id: string; name: string; status: string; created_at: string }[]>([])
+  const [docUploading, setDocUploading] = useState(false)
+  const [docErr, setDocErr] = useState<string | null>(null)
 
   useEffect(() => { api.listStudents().then(setStudents).catch(() => {}) }, [done])
+  useEffect(() => { refreshDocs() }, [])
 
   async function refresh() { setStudents(await api.listStudents()) }
+
+  async function refreshDocs() {
+    try { setDocs(await api.listCampusDocs()) } catch { /* ignore */ }
+  }
+
+  async function onDocFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    setDocErr(null); setDocUploading(true)
+    try {
+      await api.uploadCampusDoc(file)
+      await refreshDocs()
+    } catch (e) {
+      setDocErr(e instanceof Error ? e.message : 'Upload failed.')
+    } finally { setDocUploading(false) }
+  }
+
+  async function deleteDoc(id: string) {
+    setDocErr(null)
+    try {
+      await api.deleteCampusDoc(id)
+      await refreshDocs()
+    } catch (e) {
+      setDocErr(e instanceof Error ? e.message : 'Could not delete document.')
+    }
+  }
 
   async function addManual() {
     setErr(null); setDone(null)
@@ -120,6 +151,29 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
             <input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="Name" style={input(160)} />
             <input value={manualEnroll} onChange={(e) => setManualEnroll(e.target.value)} placeholder="Enrollment number" style={input(180)} />
             <button onClick={addManual} disabled={!manualName.trim() || !manualEnroll.trim()} style={btn()}>Add</button>
+          </div>
+        </div>
+
+        {/* Campus documents (PageIndex) */}
+        <div style={{ marginTop: 18, padding: 14, border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surface)' }}>
+          <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 6px' }}>Campus documents (PageIndex)</p>
+          <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
+            Upload PDFs or notes here — Campus mode answers are grounded in these documents (PageIndex retrieves, our AI answers).
+          </p>
+          <input ref={docFileRef} type="file" accept=".pdf,.md,.txt,.markdown" onChange={onDocFile} style={{ display: 'none' }} />
+          <button onClick={() => docFileRef.current?.click()} disabled={docUploading} style={{ ...btn(), background: 'var(--surface)', color: 'var(--ink)', border: '1px dashed var(--line-strong)', opacity: docUploading ? 0.6 : 1 }}>
+            {docUploading ? 'Uploading…' : '⬆ Upload document'}
+          </button>
+          {docErr && <p style={{ color: 'var(--danger)', fontSize: 12.5, marginTop: 10 }}>{docErr}</p>}
+          <div style={{ marginTop: 12, border: '1px solid var(--line)', borderRadius: 10, background: 'var(--paper-app)', overflow: 'hidden' }}>
+            {docs.length === 0 && <div style={{ padding: 12, color: 'var(--faint)', fontSize: 13 }}>No documents yet.</div>}
+            {docs.map((d) => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
+                <span style={{ flex: 1 }}>{d.name}</span>
+                <span className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--muted)' }}>{d.status}</span>
+                <button onClick={() => deleteDoc(d.id)} style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: '4px 8px', fontSize: 13 }} title="Delete">🗑</button>
+              </div>
+            ))}
           </div>
         </div>
 

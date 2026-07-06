@@ -157,6 +157,39 @@ const realApi = {
     }
   },
 
+  // ── ADMIN: Campus documents (PageIndex) ────────────────────────────
+  async listCampusDocs(): Promise<{ id: string; doc_id: string; name: string; status: string; created_at: string }[]> {
+    const { data } = await (supabase as any)
+      .from('pageindex_docs')
+      .select('id,doc_id,name,status,created_at')
+      .order('created_at', { ascending: false })
+    return (data ?? []) as { id: string; doc_id: string; name: string; status: string; created_at: string }[]
+  },
+
+  async uploadCampusDoc(file: File): Promise<{ doc_id: string; name: string; status: string }> {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error('Not authenticated')
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pageindex-upload`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+      },
+      body: form,
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error || 'Upload failed.')
+    return json as { doc_id: string; name: string; status: string }
+  },
+
+  async deleteCampusDoc(id: string): Promise<void> {
+    const { error } = await (supabase as any).from('pageindex_docs').delete().eq('id', id)
+    if (error) throw error
+  },
+
   async signInWithGoogle() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
