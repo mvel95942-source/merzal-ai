@@ -225,6 +225,12 @@ button { cursor: pointer; background: none; }
 .msg:hover .msg-actions { opacity: 1; }
 @media (hover: none) { .row-actions, .msg-actions { opacity: 1 !important; } }
 
+/* Sidebar: plain, box-free rows with a soft rounded hover highlight (ChatGPT-style) */
+.sb-row { transition: background .12s; }
+.sb-row:hover { background: var(--surface-soft); }
+.sb-row.active { background: var(--surface-soft); }
+.sb-menu-btn:hover { background: var(--line); }
+
 /* Composer textarea — auto-resize JS sets height; CSS just hides resize handle */
 .mz-composer-input {
   width: 100%; border: none; outline: none; resize: none;

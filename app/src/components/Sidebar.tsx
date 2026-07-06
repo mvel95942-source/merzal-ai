@@ -51,41 +51,41 @@ export function Sidebar(p: Props) {
 
   return (
     <aside style={{ width: '100%', height: '100%', background: 'var(--paper-app)', borderRight: '1px solid var(--line)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '16px 12px 12px 15px', display: 'flex', alignItems: 'center', gap: 11 }}>
-        <Logo size={30} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.1, flex: 1, minWidth: 0 }}>
-          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>{brand.name}</span>
-          <span style={{ fontSize: 11, color: 'var(--faint)' }}>{brand.sidebarSub}</span>
-        </div>
+      <div style={{ padding: '18px 14px 10px 17px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Logo size={26} />
+        <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{brand.name}</span>
       </div>
 
-      <div style={{ padding: '2px 12px 9px' }}>
-        <button onClick={p.onNew} style={{ width: '100%', height: 40, border: 'none', borderRadius: 10, background: 'var(--surface-soft)', color: 'var(--ink)', fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px' }}>
-          <Icon path="M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke="var(--ink-soft)" /> New chat
+      <div style={{ padding: '4px 8px 2px' }}>
+        <button onClick={p.onNew} className="sb-row" style={{ width: '100%', height: 40, border: 'none', borderRadius: 8, background: 'transparent', color: 'var(--ink)', fontSize: 14, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 10, padding: '0 11px', textAlign: 'left' }}>
+          <Icon path="M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke="var(--muted)" /> New chat
         </button>
+
+        <label className="sb-row" style={{ width: '100%', height: 40, borderRadius: 8, background: 'transparent', display: 'flex', alignItems: 'center', gap: 10, padding: '0 11px', cursor: 'text' }}>
+          <Icon path="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M21 21l-4-4" size={15} stroke="var(--muted)" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search chats"
+            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: 'var(--ink)' }}
+          />
+        </label>
       </div>
 
-      <div style={{ padding: '0 12px 8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, border: 'none', borderRadius: 10, background: 'var(--surface-soft)', padding: '0 11px' }}>
-          <Icon path="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M21 21l-4-4" size={14} stroke="var(--faint)" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats" style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--ink)' }} />
-        </div>
-      </div>
-
-      <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '2px 8px 8px' }}>
+      <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '6px 8px 8px' }}>
         {groups.map((g) => (
           <div key={g.label}>
-            <div className="mono" style={{ fontSize: 9.5, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--faint)', padding: '11px 8px 5px' }}>{g.label}</div>
+            <div className="mono" style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.02em', color: 'var(--faint)', padding: '14px 11px 6px' }}>{g.label}</div>
             {g.items.map((c) => (
-              <div key={c.id} className="chat-row" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, height: 36, borderRadius: 8, padding: '0 6px 0 10px', fontSize: 13.5, color: 'var(--ink-soft)', background: c.id === p.activeId ? 'var(--surface-soft)' : 'transparent' }}>
+              <div key={c.id} className={`chat-row sb-row${c.id === p.activeId ? ' active' : ''}`} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, height: 36, borderRadius: 8, padding: '0 6px 0 11px', fontSize: 13.5, color: 'var(--ink-soft)' }}>
                 {renaming === c.id ? (
                   <input autoFocus value={renameText} onChange={(e) => setRenameText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(null) }} onBlur={commitRename} style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--ink)', font: 'inherit' }} />
                 ) : (
-                  <span onClick={() => p.onSelect(c.id)} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{c.title}</span>
+                  <span onClick={() => p.onSelect(c.id)} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, cursor: 'pointer' }}>{c.title}</span>
                 )}
                 <div className="row-actions" style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
                   {c.pinned && <span style={{ color: '#c47a35', marginRight: 2, fontSize: 10 }}>★</span>}
-                  <button onClick={() => setMenuFor(menuFor === c.id ? null : c.id)} style={{ width: 22, height: 22, border: 'none', borderRadius: 6, background: 'transparent', color: '#b3ab9d', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>⋮</button>
+                  <button onClick={() => setMenuFor(menuFor === c.id ? null : c.id)} className="sb-menu-btn" style={{ width: 22, height: 22, border: 'none', borderRadius: 6, background: 'transparent', color: 'var(--faint)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>⋮</button>
                 </div>
                 {menuFor === c.id && (
                   <>
@@ -109,11 +109,11 @@ export function Sidebar(p: Props) {
         {groups.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: 'var(--faint)' }}>No chats yet.</div>}
       </div>
 
-      <div style={{ borderTop: '1px solid var(--line)', padding: '9px 11px' }}>
-        <button onClick={p.onSettings} style={{ width: '100%', height: 48, border: 'none', borderRadius: 11, background: 'transparent', color: 'var(--ink-soft)', fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', textAlign: 'left' }}>
-          <span style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 700, color: '#ffffff', flex: 'none' }}>{(p.account[0] || 'U').toUpperCase()}</span>
+      <div style={{ padding: '8px' }}>
+        <button onClick={p.onSettings} className="sb-row" style={{ width: '100%', height: 48, border: 'none', borderRadius: 8, background: 'transparent', color: 'var(--ink-soft)', fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px', textAlign: 'left' }}>
+          <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#ffffff', flex: 'none' }}>{(p.account[0] || 'U').toUpperCase()}</span>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0, lineHeight: 1.2 }}>
-            <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.account}</span>
+            <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.account}</span>
             <span style={{ fontSize: 11, color: 'var(--faint)' }}>Memory &amp; settings</span>
           </span>
         </button>
@@ -130,7 +130,7 @@ function MenuItem({ label, onClick, danger }: { label: string; onClick: () => vo
   )
 }
 
-function Icon({ path, size = 15, stroke = '#6a6358' }: { path: string; size?: number; stroke?: string }) {
+function Icon({ path, size = 15, stroke = 'var(--muted)' }: { path: string; size?: number; stroke?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       {path.split(' M').map((seg, i) => <path key={i} d={(i ? 'M' : '') + seg} />)}
