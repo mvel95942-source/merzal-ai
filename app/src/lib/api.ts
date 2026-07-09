@@ -356,6 +356,13 @@ const realApi = {
     if (error) throw error
   },
 
+  // ── ADMIN: business-metrics dashboard ───────────────────────────────
+  async adminAnalytics(): Promise<Record<string, number>> {
+    const { data, error } = await (supabase as any).rpc('admin_analytics')
+    if (error) throw error
+    return data as Record<string, number>
+  },
+
   // ── SHARING ───────────────────────────────────────────────────────
   // Create (or reuse) a public read-only link token for a conversation.
   async shareChat(chatId: string): Promise<string> {

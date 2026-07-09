@@ -10,6 +10,7 @@ import { Settings } from './components/Settings'
 import { SharedView } from './components/SharedView'
 import { AdminImport } from './components/AdminImport'
 import { FeedbackInbox } from './components/FeedbackInbox'
+import { AnalyticsDashboard } from './components/AnalyticsDashboard'
 import { ShareSheet } from './components/ShareSheet'
 import type { ShareTarget } from './components/ShareSheet'
 import { exportPdf, exportText } from './lib/export'
@@ -43,6 +44,7 @@ export default function App() {
   const shareToken = hash.startsWith('#/share/') ? hash.slice('#/share/'.length) : null
   const adminRoute = hash === '#/admin'
   const feedbackRoute = hash === '#/feedback'
+  const analyticsRoute = hash === '#/analytics'
 
   const loadAfterAuth = useCallback(async () => {
     const session = await api.getSession()
@@ -97,6 +99,7 @@ export default function App() {
   if (shareToken) return <SharedView token={shareToken} />
   if (adminRoute && phase === 'app' && profile?.role === 'admin') return <AdminImport onClose={() => { window.location.hash = '' }} />
   if (feedbackRoute && phase === 'app' && profile?.role === 'admin') return <FeedbackInbox onClose={() => { window.location.hash = '' }} />
+  if (analyticsRoute && phase === 'app' && profile?.role === 'admin') return <AnalyticsDashboard onClose={() => { window.location.hash = '' }} />
 
   if (phase === 'loading') {
     return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)', background: 'var(--paper)' }}>Loading {brand.name}…</div>
