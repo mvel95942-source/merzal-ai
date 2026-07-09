@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
 import type { FeedbackType, MemoryItem, Profile } from '../lib/types'
+import { isAdmin, isSuperAdmin } from '../lib/types'
 import { FeedbackForm } from './FeedbackForm'
 import { BarChart, Inbox, Pencil, Wrench } from './Icons'
 
@@ -56,13 +57,13 @@ export function Settings({ profile, onClose, onSignOut }: {
         </Section>
 
         <Section title="Account">
-          {profile?.role === 'admin' && (
+          {isAdmin(profile) && (
             <button onClick={() => { window.location.hash = '#/admin'; onClose() }} style={{ ...ghost, ...rowBtn }}><Wrench size={16} /> Admin · Manage students</button>
           )}
-          {profile?.role === 'admin' && (
+          {isSuperAdmin(profile) && (
             <button onClick={() => { window.location.hash = '#/feedback'; onClose() }} style={{ ...ghost, ...rowBtn }}><Inbox size={16} /> Feedback inbox</button>
           )}
-          {profile?.role === 'admin' && (
+          {isSuperAdmin(profile) && (
             <button onClick={() => { window.location.hash = '#/analytics'; onClose() }} style={{ ...ghost, ...rowBtn }}><BarChart size={16} /> Analytics</button>
           )}
           <button onClick={() => setFeedbackOpen(true)} style={{ ...ghost, ...rowBtn }}><Pencil size={16} /> Send feedback</button>

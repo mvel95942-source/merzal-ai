@@ -264,6 +264,26 @@ export function Star({ size = 18, style, className }: IconProps) {
   )
 }
 
+export function Building(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M5 21V5a1.5 1.5 0 0 1 1.5-1.5h7A1.5 1.5 0 0 1 15 5v16" />
+      <path d="M15 10.5h3.5A1.5 1.5 0 0 1 20 12v9" />
+      <path d="M5 21h15" />
+      <path d="M8 7.5h1M8 11h1M8 14.5h1M11.5 7.5h1M11.5 11h1M11.5 14.5h1M16.5 14h1M16.5 17h1" />
+    </Svg>
+  )
+}
+
+export function Shield(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M12 3.2 19 6v6c0 4.6-3 8-7 9-4-1-7-4.4-7-9V6Z" />
+      <path d="m9 12 2 2 4-4.2" />
+    </Svg>
+  )
+}
+
 export function Link(p: IconProps) {
   return (
     <Svg {...p}>
