@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { api } from '../lib/api'
 import { Logo } from './Logo'
+import { Book, Trash, Upload } from './Icons'
 
 type Row = { name: string; mobile: string }
 
@@ -136,11 +137,11 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
 
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: 'none' }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ height: 46, padding: '0 18px', border: '1px dashed var(--line-strong)', borderRadius: 12, background: 'var(--surface)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            ⬆ Choose file{fileName ? ` — ${fileName}` : ''}
+          <button onClick={() => fileRef.current?.click()} style={{ height: 46, padding: '0 18px', border: '1px dashed var(--line-strong)', borderRadius: 12, background: 'var(--surface)', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <Upload size={16} /> Choose file{fileName ? ` — ${fileName}` : ''}
           </button>
-          <button onClick={openGuide} style={{ height: 46, padding: '0 18px', border: '1px solid var(--line-strong)', borderRadius: 12, background: 'var(--surface)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            📘 Edit career-guidance knowledge
+          <button onClick={openGuide} style={{ height: 46, padding: '0 18px', border: '1px solid var(--line-strong)', borderRadius: 12, background: 'var(--surface)', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <Book size={16} /> Edit career-guidance knowledge
           </button>
         </div>
 
@@ -161,8 +162,8 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
             Upload PDFs or notes here — Campus mode answers are grounded in these documents (PageIndex retrieves, our AI answers).
           </p>
           <input ref={docFileRef} type="file" accept=".pdf,.md,.txt,.markdown" onChange={onDocFile} style={{ display: 'none' }} />
-          <button onClick={() => docFileRef.current?.click()} disabled={docUploading} style={{ ...btn(), background: 'var(--surface)', color: 'var(--ink)', border: '1px dashed var(--line-strong)', opacity: docUploading ? 0.6 : 1 }}>
-            {docUploading ? 'Uploading…' : '⬆ Upload document'}
+          <button onClick={() => docFileRef.current?.click()} disabled={docUploading} style={{ ...btn(), background: 'var(--surface)', color: 'var(--ink)', border: '1px dashed var(--line-strong)', opacity: docUploading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {docUploading ? 'Uploading…' : <><Upload size={16} /> Upload document</>}
           </button>
           {docErr && <p style={{ color: 'var(--danger)', fontSize: 12.5, marginTop: 10 }}>{docErr}</p>}
           <div style={{ marginTop: 12, border: '1px solid var(--line)', borderRadius: 10, background: 'var(--paper-app)', overflow: 'hidden' }}>
@@ -171,7 +172,7 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
               <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
                 <span style={{ flex: 1 }}>{d.name}</span>
                 <span className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--muted)' }}>{d.status}</span>
-                <button onClick={() => deleteDoc(d.id)} style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: '4px 8px', fontSize: 13 }} title="Delete">🗑</button>
+                <button onClick={() => deleteDoc(d.id)} style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: '4px 8px', display: 'inline-flex', alignItems: 'center' }} title="Delete"><Trash size={15} /></button>
               </div>
             ))}
           </div>
@@ -207,7 +208,7 @@ export function AdminImport({ onClose }: { onClose: () => void }) {
               <span style={{ flex: 1 }}>{s.name}</span>
               <span className="mono" style={{ color: 'var(--muted)' }}>{s.mobile}</span>
               <span className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.06em', color: s.status === 'active' ? 'var(--accent)' : 'var(--faint)' }}>{s.status}</span>
-              <button onClick={() => { setConfirmDel({ name: s.name, mobile: s.mobile }); setDelText(''); setDelErr(null) }} style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: '4px 8px', fontSize: 13 }} title="Delete">🗑️</button>
+              <button onClick={() => { setConfirmDel({ name: s.name, mobile: s.mobile }); setDelText(''); setDelErr(null) }} style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: '4px 8px', display: 'inline-flex', alignItems: 'center' }} title="Delete"><Trash size={15} /></button>
             </div>
           ))}
         </div>

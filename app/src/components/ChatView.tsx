@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
 import { aiProvider } from '../lib/ai'
@@ -15,6 +16,7 @@ import { Markdown } from './Markdown'
 import { stripThoughts } from '../lib/format'
 import { isDemo, exitDemo } from '../lib/demo'
 import { PREVIEW_LIMIT, previewRemaining } from '../lib/preview'
+import { Camera, Check, FileDoc, Image, Plus, ThumbDown, ThumbUp, Warning } from './Icons'
 
 interface Props {
   chatId: string | null
@@ -81,7 +83,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   async function runSend(text: string, m: ChatMode, fromQueue = false, atts: PendingAttachment[] = []) {
     if (!chatId) return
     const ready = atts.filter((a) => a.status === 'ready')
-    const marker = atts.length ? atts.map((a) => `📎 ${a.name}`).join('   ') + '\n' : ''
+    const marker = atts.length ? atts.map((a) => `Attachment · ${a.name}`).join('   ') + '\n' : ''
     const userMsg = await api.addMessage({ chat_id: chatId, role: 'user', content: marker + text, mode: m })
     const history = [...messages, userMsg]
     setMessages(history)
@@ -300,8 +302,8 @@ function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
     <div className="msg" style={{ minWidth: 0 }}>
       <Markdown text={stripThoughts(m.content)} />
       <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 8 }}>
-        <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} title="Good response" onClick={() => (m.reaction === 'up' ? onReact('up') : onFeedback('up'))}>👍</button>
-        <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}>👎</button>
+        <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} title="Good response" onClick={() => (m.reaction === 'up' ? onReact('up') : onFeedback('up'))}><ThumbUp size={15} /></button>
+        <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}><ThumbDown size={15} /></button>
         <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
         <button className="act-btn" onClick={onShare}>Share</button>
       </div>
@@ -391,7 +393,7 @@ function Composer(p: {
               <div key={a.id} title={a.note ?? a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line-strong)', borderRadius: 12, padding: '6px 10px', background: a.status === 'unsupported' ? 'var(--accent-soft)' : 'var(--surface)', maxWidth: 220 }}>
                 {a.kind === 'image' && a.dataUrl
                   ? <img src={a.dataUrl} alt={a.name} style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover' }} />
-                  : <span style={{ fontSize: 18 }}>{a.status === 'unsupported' ? '⚠️' : '📄'}</span>}
+                  : <span style={{ color: a.status === 'unsupported' ? 'var(--danger)' : 'var(--muted)', display: 'flex' }}>{a.status === 'unsupported' ? <Warning size={18} /> : <FileDoc size={18} />}</span>}
                 <span style={{ fontSize: 12.5, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
                 <button onClick={() => p.onRemoveAttachment(a.id)} style={{ border: 'none', background: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
@@ -419,14 +421,16 @@ function Composer(p: {
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
             <div style={{ position: 'relative', flex: 'none' }}>
-              <button title="Add" aria-label="Add" onClick={() => setMenuOpen((v) => !v)} className="mz-icon-btn" style={{ transform: menuOpen ? 'rotate(45deg)' : 'none', transition: 'transform .15s', fontSize: 22 }}>＋</button>
+              <button title="Add" aria-label="Add" onClick={() => setMenuOpen((v) => !v)} className="mz-icon-btn" style={{ transform: menuOpen ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }}>
+                <Plus size={19} />
+              </button>
               {menuOpen && (
                 <>
                   <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
                   <div style={{ position: 'absolute', bottom: 46, left: 0, zIndex: 31, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, boxShadow: 'var(--shadow-pop)', padding: 6, width: 210 }}>
-                    <AddItem icon="🖼️" label="Upload photo" onClick={() => pick(imgRef)} />
-                    <AddItem icon="📄" label="Upload file" onClick={() => pick(docRef)} />
-                    <AddItem icon="📷" label="Take photo" onClick={() => pick(camRef)} />
+                    <AddItem icon={<Image size={17} />} label="Upload photo" onClick={() => pick(imgRef)} />
+                    <AddItem icon={<FileDoc size={17} />} label="Upload file" onClick={() => pick(docRef)} />
+                    <AddItem icon={<Camera size={17} />} label="Take photo" onClick={() => pick(camRef)} />
                   </div>
                 </>
               )}
@@ -450,10 +454,10 @@ function Composer(p: {
   )
 }
 
-function AddItem({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+function AddItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
   return (
     <button onClick={onClick} style={{ width: '100%', height: 40, border: 'none', borderRadius: 10, background: 'transparent', display: 'flex', alignItems: 'center', gap: 11, padding: '0 11px', fontSize: 13.5, color: 'var(--ink-soft)', textAlign: 'left', cursor: 'pointer' }}>
-      <span style={{ fontSize: 17 }}>{icon}</span>{label}
+      <span style={{ display: 'flex', color: 'var(--muted)' }}>{icon}</span>{label}
     </button>
   )
 }
@@ -483,7 +487,7 @@ function ModePill({ mode, setMode }: { mode: ChatMode; setMode: (m: ChatMode) =>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{META[m].label}</span>
                   <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>{META[m].desc}</span>
                 </span>
-                {mode === m && <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>}
+                {mode === m && <span style={{ marginLeft: 'auto', color: 'var(--accent)', display: 'flex' }}><Check size={15} /></span>}
               </button>
             ))}
           </div>
