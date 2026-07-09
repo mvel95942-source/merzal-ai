@@ -2,7 +2,7 @@
 // whole web app is usable WITHOUT Supabase auth (which needs dashboard config).
 // Enabled by the "Explore preview" button on the login screen. Data lives only
 // in this browser. Real auth + Supabase take over once `demo` is off.
-import type { Chat, MemoryItem, Message, Profile, Reaction } from './types'
+import type { Chat, Feedback, FeedbackStatus, FeedbackType, MemoryItem, Message, Profile, Reaction } from './types'
 
 const FLAG = 'merzal_demo'
 export const isDemo = () => localStorage.getItem(FLAG) === '1'
@@ -23,6 +23,7 @@ const CHATS = 'merzal_demo_chats'
 const MSGS = (id: string) => `merzal_demo_msgs_${id}`
 const PROFILE = 'merzal_demo_profile'
 const MEMORY = 'merzal_demo_memory'
+const FEEDBACK = 'merzal_demo_feedback'
 
 export const demoApi = {
   getSession: async () => ({ user: { id: 'demo-user', email: 'you@preview.merzal' } }),
@@ -64,9 +65,34 @@ export const demoApi = {
       if (list.some((m) => m.id === id)) write(k, list.filter((m) => m.id !== id))
     }
   },
-  submitFeedback: async (f: { chat_id: string; message_id: string; type: 'up' | 'down'; comment?: string }) => {
-    const key = 'merzal_demo_feedback'
-    write(key, [{ id: uuid(), created_at: now(), ...f }, ...read<unknown[]>(key, [])])
+  submitFeedback: async (f: {
+    chat_id?: string
+    message_id?: string
+    type: FeedbackType
+    comment?: string
+    student_message?: string
+    ai_response?: string
+  }) => {
+    const key = FEEDBACK
+    const row: Feedback = {
+      id: uuid(),
+      user_id: 'demo-user',
+      register_number: 'demo-user',
+      department: read<Profile | null>(PROFILE, null)?.department ?? null,
+      chat_id: f.chat_id ?? null,
+      message_id: f.message_id ?? null,
+      type: f.type,
+      student_message: f.student_message ?? null,
+      ai_response: f.ai_response ?? null,
+      comment: f.comment ?? null,
+      status: 'open',
+      created_at: now(),
+    }
+    write(key, [row, ...read<Feedback[]>(key, [])])
+  },
+  listFeedback: async (): Promise<Feedback[]> => read<Feedback[]>(FEEDBACK, []),
+  updateFeedbackStatus: async (id: string, status: FeedbackStatus) => {
+    write(FEEDBACK, read<Feedback[]>(FEEDBACK, []).map((f) => (f.id === id ? { ...f, status } : f)))
   },
   shareChat: async (chatId: string) => {
     const token = uuid().replace(/-/g, '').slice(0, 14)
