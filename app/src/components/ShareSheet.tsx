@@ -1,3 +1,6 @@
+import type { ReactNode } from 'react'
+import { Link, Mail, MessageCircle, Send, Share as ShareIcon } from './Icons'
+
 // Share a single message (text) or a whole conversation (url) to common apps.
 export interface ShareTarget { title?: string; text?: string; url?: string }
 
@@ -8,14 +11,14 @@ export function ShareSheet({ item, onClose }: { item: ShareTarget; onClose: () =
   const enc = encodeURIComponent
   const subject = item.title ?? 'Shared from Merzal AI'
 
-  const targets: { label: string; icon: string; run: () => void }[] = [
-    { label: 'Copy', icon: '🔗', run: () => { navigator.clipboard?.writeText(url || text); onClose() } },
-    { label: 'WhatsApp', icon: '🟢', run: () => open(`https://wa.me/?text=${enc(payload)}`) },
-    { label: 'Telegram', icon: '🔵', run: () => open(url ? `https://t.me/share/url?url=${enc(url)}&text=${enc(text)}` : `https://t.me/share/url?url=${enc(text)}`) },
-    { label: 'Email', icon: '✉️', run: () => open(`mailto:?subject=${enc(subject)}&body=${enc(payload)}`) },
+  const targets: { label: string; icon: ReactNode; run: () => void }[] = [
+    { label: 'Copy', icon: <Link size={22} />, run: () => { navigator.clipboard?.writeText(url || text); onClose() } },
+    { label: 'WhatsApp', icon: <MessageCircle size={22} />, run: () => open(`https://wa.me/?text=${enc(payload)}`) },
+    { label: 'Telegram', icon: <Send size={22} />, run: () => open(url ? `https://t.me/share/url?url=${enc(url)}&text=${enc(text)}` : `https://t.me/share/url?url=${enc(text)}`) },
+    { label: 'Email', icon: <Mail size={22} />, run: () => open(`mailto:?subject=${enc(subject)}&body=${enc(payload)}`) },
   ]
   if (typeof navigator !== 'undefined' && navigator.share) {
-    targets.push({ label: 'More…', icon: '📤', run: async () => { try { await navigator.share({ title: subject, text, url: url || undefined }) } catch { /* cancelled */ } onClose() } })
+    targets.push({ label: 'More…', icon: <ShareIcon size={22} />, run: async () => { try { await navigator.share({ title: subject, text, url: url || undefined }) } catch { /* cancelled */ } onClose() } })
   }
   function open(href: string) { window.open(href, '_blank', 'noopener,noreferrer'); onClose() }
 

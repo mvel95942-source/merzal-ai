@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { brand } from '../lib/brand'
 import type { Chat } from '../lib/types'
 import { Logo } from './Logo'
+import { Star } from './Icons'
 
 interface Props {
   chats: Chat[]
@@ -84,7 +85,7 @@ export function Sidebar(p: Props) {
                   <span onClick={() => p.onSelect(c.id)} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, cursor: 'pointer' }}>{c.title}</span>
                 )}
                 <div className="row-actions" style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
-                  {c.pinned && <span style={{ color: '#c47a35', marginRight: 2, fontSize: 10 }}>★</span>}
+                  {c.pinned && <span style={{ color: '#c47a35', marginRight: 2, display: 'flex' }}><Star size={11} /></span>}
                   <button onClick={() => setMenuFor(menuFor === c.id ? null : c.id)} className="sb-menu-btn" style={{ width: 22, height: 22, border: 'none', borderRadius: 6, background: 'transparent', color: 'var(--faint)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>⋮</button>
                 </div>
                 {menuFor === c.id && (

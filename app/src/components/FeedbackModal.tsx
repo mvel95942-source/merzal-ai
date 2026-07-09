@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-// Structured feedback collected on 👍/👎 and stored in `message_feedback`.
+// Structured feedback collected on thumbs up/down and stored in `message_feedback`.
 export function FeedbackModal({ type, onClose, onSubmit }: {
   type: 'up' | 'down'
   onClose: () => void

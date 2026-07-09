@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { api } from '../lib/api'
 import { Logo } from './Logo'
 import type { Feedback, FeedbackStatus, FeedbackType } from '../lib/types'
+import { Bug, Lightbulb, Pencil, ThumbDown, ThumbUp } from './Icons'
 
-const TYPE_META: Record<FeedbackType, { icon: string; label: string }> = {
-  helpful: { icon: '👍', label: 'Helpful' },
-  not_helpful: { icon: '👎', label: 'Not helpful' },
-  bug: { icon: '🐞', label: 'Bug' },
-  feature: { icon: '💡', label: 'Feature' },
-  general: { icon: '✍️', label: 'General' },
+const TYPE_META: Record<FeedbackType, { icon: ReactNode; label: string }> = {
+  helpful: { icon: <ThumbUp size={14} />, label: 'Helpful' },
+  not_helpful: { icon: <ThumbDown size={14} />, label: 'Not helpful' },
+  bug: { icon: <Bug size={14} />, label: 'Bug' },
+  feature: { icon: <Lightbulb size={14} />, label: 'Feature' },
+  general: { icon: <Pencil size={14} />, label: 'General' },
 }
 
 const STATUS_META: Record<FeedbackStatus, string> = {
@@ -64,7 +66,7 @@ export function FeedbackInbox({ onClose }: { onClose: () => void }) {
       </header>
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px 60px' }}>
         <h1 className="display" style={{ fontWeight: 400, fontSize: 26, margin: '0 0 6px' }}>Feedback inbox</h1>
-        <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 20px' }}>Every 👍/👎, bug report, feature request, and general note students send — triage below.</p>
+        <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 20px' }}>Every reaction, bug report, feature request, and general note students send — triage below.</p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
           <FilterGroup label="Status">
@@ -77,7 +79,9 @@ export function FeedbackInbox({ onClose }: { onClose: () => void }) {
           <FilterGroup label="Type">
             {TYPE_FILTERS.map((t) => (
               <FilterChip key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)}>
-                {t === 'all' ? 'All' : `${TYPE_META[t].icon} ${TYPE_META[t].label}`}
+                {t === 'all' ? 'All' : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>{TYPE_META[t].icon}{TYPE_META[t].label}</span>
+                )}
               </FilterChip>
             ))}
           </FilterGroup>

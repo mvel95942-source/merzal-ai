@@ -1,13 +1,15 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import type { FeedbackType } from '../lib/types'
+import { Bug, Lightbulb, Pencil } from './Icons'
 
 // Standalone feedback entry point (Settings → "Send feedback"), available to
 // every signed-in user — not tied to a specific chat message. Feeds the same
 // `feedback` table the Super Admin inbox reads from.
-const TYPES: { value: FeedbackType; icon: string; label: string }[] = [
-  { value: 'bug', icon: '🐞', label: 'Report a bug' },
-  { value: 'feature', icon: '💡', label: 'Suggest a feature' },
-  { value: 'general', icon: '✍️', label: 'General feedback' },
+const TYPES: { value: FeedbackType; icon: ReactNode; label: string }[] = [
+  { value: 'bug', icon: <Bug size={15} />, label: 'Report a bug' },
+  { value: 'feature', icon: <Lightbulb size={15} />, label: 'Suggest a feature' },
+  { value: 'general', icon: <Pencil size={15} />, label: 'General feedback' },
 ]
 
 export function FeedbackForm({ onClose, onSubmit }: {

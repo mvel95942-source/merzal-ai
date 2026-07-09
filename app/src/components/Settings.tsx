@@ -3,6 +3,7 @@ import { brand } from '../lib/brand'
 import { api } from '../lib/api'
 import type { FeedbackType, MemoryItem, Profile } from '../lib/types'
 import { FeedbackForm } from './FeedbackForm'
+import { BarChart, Inbox, Pencil, Wrench } from './Icons'
 
 export function Settings({ profile, onClose, onSignOut }: {
   profile: Profile | null
@@ -56,15 +57,15 @@ export function Settings({ profile, onClose, onSignOut }: {
 
         <Section title="Account">
           {profile?.role === 'admin' && (
-            <button onClick={() => { window.location.hash = '#/admin'; onClose() }} style={{ ...ghost, marginBottom: 8, display: 'block' }}>🛠 Admin · Manage students</button>
+            <button onClick={() => { window.location.hash = '#/admin'; onClose() }} style={{ ...ghost, ...rowBtn }}><Wrench size={16} /> Admin · Manage students</button>
           )}
           {profile?.role === 'admin' && (
-            <button onClick={() => { window.location.hash = '#/feedback'; onClose() }} style={{ ...ghost, marginBottom: 8, display: 'block' }}>📥 Feedback inbox</button>
+            <button onClick={() => { window.location.hash = '#/feedback'; onClose() }} style={{ ...ghost, ...rowBtn }}><Inbox size={16} /> Feedback inbox</button>
           )}
           {profile?.role === 'admin' && (
-            <button onClick={() => { window.location.hash = '#/analytics'; onClose() }} style={{ ...ghost, marginBottom: 8, display: 'block' }}>📊 Analytics</button>
+            <button onClick={() => { window.location.hash = '#/analytics'; onClose() }} style={{ ...ghost, ...rowBtn }}><BarChart size={16} /> Analytics</button>
           )}
-          <button onClick={() => setFeedbackOpen(true)} style={{ ...ghost, marginBottom: 8, display: 'block' }}>✍️ Send feedback</button>
+          <button onClick={() => setFeedbackOpen(true)} style={{ ...ghost, ...rowBtn }}><Pencil size={16} /> Send feedback</button>
           <button onClick={onSignOut} style={ghost}>Sign out</button>
           <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 16, lineHeight: 1.5 }}>{brand.loginFooter}</p>
         </Section>
@@ -93,3 +94,4 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
 const input: React.CSSProperties = { width: '100%', height: 44, border: '1px solid var(--line-strong)', borderRadius: 10, background: 'var(--paper-app)', padding: '0 13px', fontSize: 14, color: 'var(--ink)', outline: 'none', marginBottom: 0 }
 const primary: React.CSSProperties = { height: 44, border: 'none', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, padding: '0 18px' }
 const ghost: React.CSSProperties = { height: 42, border: '1px solid var(--line-strong)', borderRadius: 10, background: 'var(--surface)', color: 'var(--ink-soft)', fontSize: 13.5, fontWeight: 500, padding: '0 18px' }
+const rowBtn: React.CSSProperties = { marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left' }
