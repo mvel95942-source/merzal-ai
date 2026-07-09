@@ -3,7 +3,7 @@
 // require user_id = auth.uid().
 import { supabase } from './supabase'
 import { demoApi, isDemo } from './demo'
-import type { Chat, MemoryItem, Message, Profile, Reaction } from './types'
+import type { Chat, Feedback, FeedbackStatus, FeedbackType, MemoryItem, Message, Profile, Reaction } from './types'
 
 async function uid(): Promise<string> {
   const { data } = await supabase.auth.getUser()
@@ -310,9 +310,49 @@ const realApi = {
   },
 
   // ── FEEDBACK ──────────────────────────────────────────────────────
-  async submitFeedback(f: { chat_id: string; message_id: string; type: 'up' | 'down'; comment?: string }) {
-    const id = await uid()
-    const { error } = await supabase.from('message_feedback').insert({ user_id: id, ...f })
+  // Every submission (thumbs on a reply, or a standalone bug/feature/general
+  // note) lands in the `feedback` table, denormalized with register number +
+  // department so Super Admin can triage without joining. RLS lets any authed
+  // user insert their own row; only role='admin' can list/update.
+  async submitFeedback(f: {
+    chat_id?: string
+    message_id?: string
+    type: FeedbackType
+    comment?: string
+    student_message?: string
+    ai_response?: string
+  }) {
+    const { data } = await supabase.auth.getSession()
+    const session = data.session
+    if (!session?.user) throw new Error('Not authenticated')
+    let department: string | null = null
+    try {
+      const prof = await this.getProfile()
+      department = prof?.department ?? null
+    } catch { /* profile lookup is best-effort */ }
+    const { error } = await (supabase as any).from('feedback').insert({
+      user_id: session.user.id,
+      register_number: emailToRoll(session.user.email),
+      department,
+      chat_id: f.chat_id ?? null,
+      message_id: f.message_id ?? null,
+      type: f.type,
+      student_message: f.student_message ?? null,
+      ai_response: f.ai_response ?? null,
+      comment: f.comment ?? null,
+    })
+    if (error) throw error
+  },
+
+  // ── ADMIN: feedback inbox ──────────────────────────────────────────
+  async listFeedback(): Promise<Feedback[]> {
+    const { data, error } = await (supabase as any).from('feedback').select('*').order('created_at', { ascending: false })
+    if (error) throw error
+    return (data ?? []) as Feedback[]
+  },
+
+  async updateFeedbackStatus(id: string, status: FeedbackStatus): Promise<void> {
+    const { error } = await (supabase as any).from('feedback').update({ status }).eq('id', id)
     if (error) throw error
   },
 

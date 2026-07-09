@@ -215,7 +215,16 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
             const { m, type } = feedbackFor
             setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reaction: type } : x)))
             await api.reactMessage(m.id, type)
-            if (chatId) await api.submitFeedback({ chat_id: chatId, message_id: m.id, type, comment }).catch(() => {})
+            const idx = messages.findIndex((x) => x.id === m.id)
+            const studentMessage = messages.slice(0, idx).reverse().find((x) => x.role === 'user')?.content
+            await api.submitFeedback({
+              chat_id: chatId ?? undefined,
+              message_id: m.id,
+              type: type === 'up' ? 'helpful' : 'not_helpful',
+              comment,
+              student_message: studentMessage,
+              ai_response: m.content,
+            }).catch(() => {})
             setFeedbackFor(null)
           }}
         />

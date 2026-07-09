@@ -35,3 +35,23 @@ export interface MemoryItem {
 }
 
 export type ConnState = 'live' | 'slow' | 'offline'
+
+// Student → Super Admin feedback inbox. One row per submission (thumbs on an
+// AI reply, or a standalone bug/feature/general note from Settings).
+export type FeedbackType = 'helpful' | 'not_helpful' | 'bug' | 'feature' | 'general'
+export type FeedbackStatus = 'open' | 'in_progress' | 'resolved'
+
+export interface Feedback {
+  id: string
+  user_id: string
+  register_number: string | null
+  department: string | null
+  chat_id: string | null
+  message_id: string | null
+  type: FeedbackType
+  student_message: string | null
+  ai_response: string | null
+  comment: string | null
+  status: FeedbackStatus
+  created_at: string
+}

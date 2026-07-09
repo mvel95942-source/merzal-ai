@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
-import type { MemoryItem, Profile } from '../lib/types'
+import type { FeedbackType, MemoryItem, Profile } from '../lib/types'
+import { FeedbackForm } from './FeedbackForm'
 
 export function Settings({ profile, onClose, onSignOut }: {
   profile: Profile | null
@@ -10,6 +11,7 @@ export function Settings({ profile, onClose, onSignOut }: {
 }) {
   const [memory, setMemory] = useState<MemoryItem[]>([])
   const [newFact, setNewFact] = useState('')
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   useEffect(() => { api.listMemory().then(setMemory) }, [])
 
@@ -54,12 +56,24 @@ export function Settings({ profile, onClose, onSignOut }: {
 
         <Section title="Account">
           {profile?.role === 'admin' && (
-            <button onClick={() => { window.location.hash = '#/admin'; onClose() }} style={{ ...ghost, marginBottom: 8 }}>🛠 Admin · Manage students</button>
+            <button onClick={() => { window.location.hash = '#/admin'; onClose() }} style={{ ...ghost, marginBottom: 8, display: 'block' }}>🛠 Admin · Manage students</button>
           )}
+          {profile?.role === 'admin' && (
+            <button onClick={() => { window.location.hash = '#/feedback'; onClose() }} style={{ ...ghost, marginBottom: 8, display: 'block' }}>📥 Feedback inbox</button>
+          )}
+          <button onClick={() => setFeedbackOpen(true)} style={{ ...ghost, marginBottom: 8, display: 'block' }}>✍️ Send feedback</button>
           <button onClick={onSignOut} style={ghost}>Sign out</button>
           <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 16, lineHeight: 1.5 }}>{brand.loginFooter}</p>
         </Section>
       </div>
+      {feedbackOpen && (
+        <FeedbackForm
+          onClose={() => setFeedbackOpen(false)}
+          onSubmit={async (type: FeedbackType, comment: string) => {
+            await api.submitFeedback({ type, comment })
+          }}
+        />
+      )}
     </div>
   )
 }
