@@ -55,3 +55,7 @@ export interface Feedback {
   status: FeedbackStatus
   created_at: string
 }
+
+// Super Admin analytics dashboard: business metrics returned by the
+// `admin_analytics` RPC (admin-gated server-side). All values are integers.
+export type AdminAnalytics = Record<string, number>

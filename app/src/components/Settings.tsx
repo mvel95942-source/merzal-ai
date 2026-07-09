@@ -61,6 +61,9 @@ export function Settings({ profile, onClose, onSignOut }: {
           {profile?.role === 'admin' && (
             <button onClick={() => { window.location.hash = '#/feedback'; onClose() }} style={{ ...ghost, marginBottom: 8, display: 'block' }}>📥 Feedback inbox</button>
           )}
+          {profile?.role === 'admin' && (
+            <button onClick={() => { window.location.hash = '#/analytics'; onClose() }} style={{ ...ghost, marginBottom: 8, display: 'block' }}>📊 Analytics</button>
+          )}
           <button onClick={() => setFeedbackOpen(true)} style={{ ...ghost, marginBottom: 8, display: 'block' }}>✍️ Send feedback</button>
           <button onClick={onSignOut} style={ghost}>Sign out</button>
           <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 16, lineHeight: 1.5 }}>{brand.loginFooter}</p>

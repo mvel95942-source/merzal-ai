@@ -116,6 +116,26 @@ export const demoApi = {
     return chat.id
   },
 
+  // ── ADMIN: business-metrics dashboard ───────────────────────────────
+  adminAnalytics: async (): Promise<Record<string, number>> => ({
+    total_students: 42,
+    active_students: 31,
+    total_chats: 187,
+    total_questions: 612,
+    questions_today: 24,
+    dau: 12,
+    wau: 27,
+    mau: 38,
+    new_students_7d: 5,
+    new_students_30d: 14,
+    feedback_total: 63,
+    feedback_helpful: 41,
+    feedback_not_helpful: 7,
+    feedback_bugs: 6,
+    feedback_features: 9,
+    feedback_open: 11,
+  }),
+
   listMemory: async (): Promise<MemoryItem[]> => read<MemoryItem[]>(MEMORY, []),
   addMemory: async (fact: string): Promise<MemoryItem> => {
     const item = { id: uuid(), fact }
