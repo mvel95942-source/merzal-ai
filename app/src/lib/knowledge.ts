@@ -56,29 +56,40 @@ export const WorldKnowledgeProvider: KnowledgeProvider = {
   },
 }
 
-// Campus grounding: pull the indexed campus doc content from PageIndex and
-// return it as context for DeepSeek to answer from. Falls back to the admin's
-// career-guidance markdown when PageIndex isn't configured or errors. Cached
-// briefly so chat sends don't re-fetch.
+// Campus grounding: combine BOTH sources so answers are grounded in everything
+// the admin has provided —
+//   1. the manually-edited career-guidance knowledge (campus_knowledge table),
+//   2. the indexed campus document(s) from PageIndex (when configured).
+// Neither replaces the other. DeepSeek writes the answer from the combined
+// context. Each source is cached briefly so chat sends don't re-fetch.
+async function careerGuideContent(): Promise<string> {
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.text
+  try {
+    const g = await api.getCareerGuide()
+    const text = (g?.content ?? '').slice(0, CAMPUS_KNOWLEDGE_BUDGET).trim()
+    cached = { at: Date.now(), text }
+    return text
+  } catch { return cached?.text ?? '' }
+}
+
 export const CampusKnowledgeProvider: KnowledgeProvider = {
   id: 'campus',
   async retrieve(/* query */) {
+    const sources: { label: string; body: string }[] = []
+
+    const guide = await careerGuideContent()
+    if (guide) sources.push({ label: 'Campus notes (kept up to date by your admin)', body: guide })
+
     if (hasPageIndex) {
       try {
-        const body = await pageIndexContent()
-        if (body) return `Campus knowledge — answer Campus-mode questions from this document; if it isn't covered here, say you don't have that information:\n${body}`
-      } catch { /* fall through to the career-guide fallback */ }
+        const docs = await pageIndexContent()
+        if (docs) sources.push({ label: 'Campus documents', body: docs })
+      } catch { /* keep whatever else we have */ }
     }
-    try {
-      if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.text
-      const g = await api.getCareerGuide()
-      const body = (g?.content ?? '').slice(0, CAMPUS_KNOWLEDGE_BUDGET).trim()
-      const text = body
-        ? `Campus knowledge — answer Campus-mode questions from this document when relevant:\n${body}`
-        : ''
-      cached = { at: Date.now(), text }
-      return text
-    } catch { return '' }
+
+    if (!sources.length) return ''
+    const blocks = sources.map((s) => `### ${s.label}\n${s.body}`).join('\n\n')
+    return `Campus knowledge — answer Campus-mode questions from the material below; if it isn't covered here, say you don't have that information:\n\n${blocks}`
   },
 }
 
