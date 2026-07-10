@@ -293,3 +293,76 @@ export function Link(p: IconProps) {
     </Svg>
   )
 }
+
+export function Users(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="9" cy="8" r="3.3" />
+      <path d="M2.8 19.5a6.2 6.2 0 0 1 12.4 0" />
+      <path d="M15.5 5.2a3.3 3.3 0 0 1 0 6.4" />
+      <path d="M17 13.3a6.2 6.2 0 0 1 4.2 6.2" />
+    </Svg>
+  )
+}
+
+export function Refresh(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M4 12a8 8 0 0 1 13.66-5.66L20 8.5" />
+      <path d="M20 3.5v5h-5" />
+      <path d="M20 12a8 8 0 0 1-13.66 5.66L4 15.5" />
+      <path d="M4 20.5v-5h5" />
+    </Svg>
+  )
+}
+
+export function TrendingUp(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="m3 16.5 6.4-6.4 4 4L21 6.5" />
+      <path d="M15 6.5h6v6" />
+    </Svg>
+  )
+}
+
+export function TrendingDown(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="m3 7.5 6.4 6.4 4-4L21 17.5" />
+      <path d="M15 17.5h6v-6" />
+    </Svg>
+  )
+}
+
+export function CalendarDays(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="3.5" y="4.5" width="17" height="16" rx="2.5" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 2.5v4M16 2.5v4" />
+      <path d="M7.5 13.5h1M11.5 13.5h1M15.5 13.5h1M7.5 17h1M11.5 17h1M15.5 17h1" />
+    </Svg>
+  )
+}
+
+export function Clock(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3.2 2" />
+    </Svg>
+  )
+}
+
+export function Trophy(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M7 4h10v5.5a5 5 0 0 1-10 0Z" />
+      <path d="M7 5.5H4a1 1 0 0 0-1 1v1a3.5 3.5 0 0 0 3.5 3.5" />
+      <path d="M17 5.5h3a1 1 0 0 1 1 1v1a3.5 3.5 0 0 1-3.5 3.5" />
+      <path d="M12 14.5v3" />
+      <path d="M8.5 21h7" />
+      <path d="M9.5 17.5h5l.6 3.5h-6.2Z" />
+    </Svg>
+  )
+}

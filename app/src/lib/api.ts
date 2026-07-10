@@ -3,7 +3,7 @@
 // require user_id = auth.uid().
 import { supabase } from './supabase'
 import { demoApi, isDemo } from './demo'
-import type { AdminUser, Chat, Department, Feedback, FeedbackStatus, FeedbackType, MemoryItem, Message, Profile, Reaction } from './types'
+import type { AdminAnalytics, AdminUser, Chat, Department, Feedback, FeedbackStatus, FeedbackType, MemoryItem, Message, Profile, Reaction } from './types'
 
 async function uid(): Promise<string> {
   const { data } = await supabase.auth.getUser()
@@ -438,10 +438,10 @@ const realApi = {
   },
 
   // ── ADMIN: business-metrics dashboard ───────────────────────────────
-  async adminAnalytics(): Promise<Record<string, number>> {
+  async adminAnalytics(): Promise<AdminAnalytics> {
     const { data, error } = await (supabase as any).rpc('admin_analytics')
     if (error) throw error
-    return data as Record<string, number>
+    return data as AdminAnalytics
   },
 
   // ── SHARING ───────────────────────────────────────────────────────

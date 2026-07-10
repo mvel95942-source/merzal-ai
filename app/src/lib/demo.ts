@@ -2,7 +2,7 @@
 // whole web app is usable WITHOUT Supabase auth (which needs dashboard config).
 // Enabled by the "Explore preview" button on the login screen. Data lives only
 // in this browser. Real auth + Supabase take over once `demo` is off.
-import type { AdminUser, Chat, Department, Feedback, FeedbackStatus, FeedbackType, MemoryItem, Message, Profile, Reaction } from './types'
+import type { AdminAnalytics, AdminUser, Chat, DailyPoint, Department, Feedback, FeedbackStatus, FeedbackType, HeatmapPoint, MemoryItem, Message, Profile, Reaction, TopStudent } from './types'
 
 const FLAG = 'merzal_demo'
 export const isDemo = () => localStorage.getItem(FLAG) === '1'
@@ -50,6 +50,76 @@ const STUDENTS_SEED: DemoStudent[] = [
   { id: 'stu-2', name: 'Rahul Nair', mobile: '21IT014', status: 'active', department_id: 'dept-it', year: 2 },
   { id: 'stu-3', name: 'Priya Rao', mobile: '21CS042', status: 'active', department_id: 'dept-cse', year: 4 },
   { id: 'stu-4', name: 'Karthik S', mobile: '21EC009', status: 'pending_profile', department_id: 'dept-ece', year: 1 },
+]
+
+// ── Analytics preview data ──────────────────────────────────────────
+// Deterministic pseudo-random generator (mulberry32) so the demo charts look
+// realistic but stay stable across "Refresh" clicks and re-renders.
+function mulberry32(seed: number) {
+  return function rand() {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+function lastNDays(n: number): string[] {
+  const out: string[] = []
+  const base = new Date()
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(base)
+    d.setDate(d.getDate() - i)
+    out.push(d.toISOString().slice(0, 10))
+  }
+  return out
+}
+function sum(ns: number[]): number { return ns.reduce((a, b) => a + b, 0) }
+
+function genQuestionsDaily(): DailyPoint[] {
+  const rnd = mulberry32(42)
+  return lastNDays(30).map((d, i) => {
+    const dow = new Date(d + 'T00:00:00').getDay()
+    const weekend = dow === 0 || dow === 6
+    const trend = 16 + i * 0.55
+    const noise = (rnd() - 0.5) * 9
+    const n = Math.max(2, Math.round(trend + noise + (weekend ? -7 : 0)))
+    return { d, n }
+  })
+}
+function genStudentsDaily(): DailyPoint[] {
+  const rnd = mulberry32(99)
+  return lastNDays(30).map((d) => {
+    const spike = rnd() > 0.88 ? Math.round(rnd() * 4) : 0
+    const n = Math.max(0, Math.round(rnd() * 1.6) + spike)
+    return { d, n }
+  })
+}
+function genHeatmap(): HeatmapPoint[] {
+  const rnd = mulberry32(7)
+  const out: HeatmapPoint[] = []
+  for (let dow = 0; dow < 7; dow++) {
+    const weekend = dow === 0 || dow === 6
+    for (let hr = 0; hr < 24; hr++) {
+      let base = 0
+      if (hr >= 8 && hr <= 22) base = 4 + Math.sin(((hr - 8) / 14) * Math.PI) * 11
+      if (hr >= 19 && hr <= 22) base += 6
+      if (weekend) base *= 0.55
+      out.push({ dow, hr, n: Math.max(0, Math.round(base + rnd() * 4)) })
+    }
+  }
+  return out
+}
+
+const QUESTIONS_DAILY = genQuestionsDaily()
+const STUDENTS_DAILY = genStudentsDaily()
+const HEATMAP = genHeatmap()
+const TOP_STUDENTS: TopStudent[] = [
+  { name: 'Ananya Iyer', register: '21CS001', n: 142 },
+  { name: 'Priya Rao', register: '21CS042', n: 118 },
+  { name: 'Rahul Nair', register: '21IT014', n: 97 },
+  { name: 'Karthik S', register: '21EC009', n: 81 },
+  { name: 'Meera Pillai', register: '21ME027', n: 63 },
+  { name: 'Arjun Kumar', register: '21CV011', n: 54 },
 ]
 
 export const demoApi = {
@@ -150,24 +220,43 @@ export const demoApi = {
   },
 
   // ── ADMIN: business-metrics dashboard ───────────────────────────────
-  adminAnalytics: async (): Promise<Record<string, number>> => ({
-    total_students: 42,
-    active_students: 31,
-    total_chats: 187,
-    total_questions: 612,
-    questions_today: 24,
-    dau: 12,
-    wau: 27,
-    mau: 38,
-    new_students_7d: 5,
-    new_students_30d: 14,
-    feedback_total: 63,
-    feedback_helpful: 41,
-    feedback_not_helpful: 7,
-    feedback_bugs: 6,
-    feedback_features: 9,
-    feedback_open: 11,
-  }),
+  adminAnalytics: async (): Promise<AdminAnalytics> => {
+    const qToday = QUESTIONS_DAILY[QUESTIONS_DAILY.length - 1].n
+    const qYesterday = QUESTIONS_DAILY[QUESTIONS_DAILY.length - 2].n
+    const q7d = sum(QUESTIONS_DAILY.slice(-7).map((p) => p.n))
+    const qPrev7d = sum(QUESTIONS_DAILY.slice(-14, -7).map((p) => p.n))
+    const q30d = sum(QUESTIONS_DAILY.map((p) => p.n))
+    const newStudents7d = sum(STUDENTS_DAILY.slice(-7).map((p) => p.n))
+    const newStudents30d = sum(STUDENTS_DAILY.map((p) => p.n))
+    return {
+      total_students: 128,
+      active_students: 34,
+      total_departments: DEPARTMENTS_SEED.length,
+      total_chats: 341,
+      total_questions: 1840 + q30d,
+      questions_today: qToday,
+      questions_yesterday: qYesterday,
+      questions_7d: q7d,
+      questions_prev_7d: qPrev7d,
+      dau: 34,
+      wau: 78,
+      mau: 111,
+      active_prev_7d: 71,
+      new_students_7d: newStudents7d,
+      new_students_30d: newStudents30d,
+      feedback_total: 63,
+      feedback_helpful: 41,
+      feedback_not_helpful: 7,
+      feedback_bugs: 6,
+      feedback_features: 9,
+      feedback_open: 11,
+      questions_daily: QUESTIONS_DAILY,
+      students_daily: STUDENTS_DAILY,
+      heatmap: HEATMAP,
+      top_students: TOP_STUDENTS,
+      by_mode: { campus: 1520, world: 620 },
+    }
+  },
 
   listMemory: async (): Promise<MemoryItem[]> => read<MemoryItem[]>(MEMORY, []),
   addMemory: async (fact: string): Promise<MemoryItem> => {
@@ -242,6 +331,21 @@ export const demoApi = {
     write(STUDENTS, list)
     return n
   },
+
+  // ── ADMIN: campus knowledge (career-guidance) + PageIndex docs ──────
+  getCareerGuide: async (): Promise<{ id: string; title: string; content: string } | null> =>
+    read<{ id: string; title: string; content: string } | null>('merzal_demo_guide', null),
+  saveCareerGuide: async (title: string, content: string): Promise<void> =>
+    write('merzal_demo_guide', { id: 'demo-guide', title, content }),
+  listCampusDocs: async (): Promise<{ id: string; doc_id: string; name: string; status: string; created_at: string }[]> =>
+    read('merzal_demo_pidocs', [] as { id: string; doc_id: string; name: string; status: string; created_at: string }[]),
+  uploadCampusDoc: async (file: File): Promise<void> => {
+    const list = read('merzal_demo_pidocs', [] as { id: string; doc_id: string; name: string; status: string; created_at: string }[])
+    list.unshift({ id: uuid(), doc_id: 'pi-demo-' + uuid().slice(0, 8), name: file.name, status: 'indexing', created_at: now() })
+    write('merzal_demo_pidocs', list)
+  },
+  deleteCampusDoc: async (id: string): Promise<void> =>
+    write('merzal_demo_pidocs', read('merzal_demo_pidocs', [] as { id: string }[]).filter((d) => d.id !== id)),
 }
 
 function mutateChat(id: string, fn: (c: Chat) => Chat) {
