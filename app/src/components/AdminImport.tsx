@@ -40,6 +40,7 @@ export function AdminImport({ profile, onClose }: { profile: Profile | null; onC
   const [guideOpen, setGuideOpen] = useState(false)
   const [guide, setGuide] = useState<{ id?: string; title: string; content: string }>({ title: 'Career guidance', content: '' })
   const [guideSaved, setGuideSaved] = useState(false)
+  const [guideErr, setGuideErr] = useState<string | null>(null)
   const docFileRef = useRef<HTMLInputElement>(null)
   const [docs, setDocs] = useState<{ id: string; doc_id: string; name: string; status: string; created_at: string }[]>([])
   const [docUploading, setDocUploading] = useState(false)
@@ -201,8 +202,9 @@ export function AdminImport({ profile, onClose }: { profile: Profile | null; onC
     if (g) setGuide(g)
   }
   async function saveGuide() {
+    setGuideErr(null); setGuideSaved(false)
     try { await api.saveCareerGuide(guide.title.trim() || 'Career guidance', guide.content); setGuideSaved(true) }
-    catch (e) { setErr(e instanceof Error ? e.message : 'Could not save guide.') }
+    catch (e) { setGuideErr(e instanceof Error ? e.message : 'Could not save guide.') }
   }
 
   return (
@@ -442,6 +444,7 @@ export function AdminImport({ profile, onClose }: { profile: Profile | null; onC
             <input value={guide.title} onChange={(e) => setGuide({ ...guide, title: e.target.value })} placeholder="Title" style={input()} />
             <textarea value={guide.content} onChange={(e) => setGuide({ ...guide, content: e.target.value })} placeholder="# Career guidance&#10;&#10;Add your campus-specific guidance here…" rows={16} style={{ ...input(), height: 320, resize: 'vertical', fontFamily: 'var(--font-mono, monospace)', fontSize: 13, padding: '10px 12px' }} />
             {guideSaved && <p style={{ color: 'var(--accent)', fontSize: 13, margin: '6px 0 0' }}>Saved.</p>}
+            {guideErr && <p style={{ color: 'var(--danger)', fontSize: 13, margin: '6px 0 0' }}>{guideErr}</p>}
             <div style={{ display: 'flex', gap: 10, marginTop: 14, justifyContent: 'flex-end' }}>
               <button onClick={() => setGuideOpen(false)} style={{ ...btn(), background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--line-strong)' }}>Close</button>
               <button onClick={saveGuide} style={btn()}>Save</button>

@@ -331,6 +331,21 @@ export const demoApi = {
     write(STUDENTS, list)
     return n
   },
+
+  // ── ADMIN: campus knowledge (career-guidance) + PageIndex docs ──────
+  getCareerGuide: async (): Promise<{ id: string; title: string; content: string } | null> =>
+    read<{ id: string; title: string; content: string } | null>('merzal_demo_guide', null),
+  saveCareerGuide: async (title: string, content: string): Promise<void> =>
+    write('merzal_demo_guide', { id: 'demo-guide', title, content }),
+  listCampusDocs: async (): Promise<{ id: string; doc_id: string; name: string; status: string; created_at: string }[]> =>
+    read('merzal_demo_pidocs', [] as { id: string; doc_id: string; name: string; status: string; created_at: string }[]),
+  uploadCampusDoc: async (file: File): Promise<void> => {
+    const list = read('merzal_demo_pidocs', [] as { id: string; doc_id: string; name: string; status: string; created_at: string }[])
+    list.unshift({ id: uuid(), doc_id: 'pi-demo-' + uuid().slice(0, 8), name: file.name, status: 'indexing', created_at: now() })
+    write('merzal_demo_pidocs', list)
+  },
+  deleteCampusDoc: async (id: string): Promise<void> =>
+    write('merzal_demo_pidocs', read('merzal_demo_pidocs', [] as { id: string }[]).filter((d) => d.id !== id)),
 }
 
 function mutateChat(id: string, fn: (c: Chat) => Chat) {
