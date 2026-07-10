@@ -3,6 +3,7 @@ import { api, emailToRoll } from './lib/api'
 import { hasSupabase } from './lib/supabase'
 import { brand } from './lib/brand'
 import type { Chat, Profile } from './lib/types'
+import { isAdmin, isSuperAdmin } from './lib/types'
 import { Login } from './components/Login'
 import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
@@ -97,9 +98,11 @@ export default function App() {
   }
 
   if (shareToken) return <SharedView token={shareToken} />
-  if (adminRoute && phase === 'app' && profile?.role === 'admin') return <AdminImport onClose={() => { window.location.hash = '' }} />
-  if (feedbackRoute && phase === 'app' && profile?.role === 'admin') return <FeedbackInbox onClose={() => { window.location.hash = '' }} />
-  if (analyticsRoute && phase === 'app' && profile?.role === 'admin') return <AnalyticsDashboard onClose={() => { window.location.hash = '' }} />
+  // #/admin is open to any admin (Super or Department); feedback + analytics
+  // are Super Admin only — both here and server-side via RLS.
+  if (adminRoute && phase === 'app' && isAdmin(profile)) return <AdminImport profile={profile} onClose={() => { window.location.hash = '' }} />
+  if (feedbackRoute && phase === 'app' && isSuperAdmin(profile)) return <FeedbackInbox onClose={() => { window.location.hash = '' }} />
+  if (analyticsRoute && phase === 'app' && isSuperAdmin(profile)) return <AnalyticsDashboard onClose={() => { window.location.hash = '' }} />
 
   if (phase === 'loading') {
     return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)', background: 'var(--paper)' }}>Loading {brand.name}…</div>

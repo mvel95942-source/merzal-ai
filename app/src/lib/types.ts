@@ -6,9 +6,42 @@ export interface Profile {
   id: string
   college_id: string
   department: string | null
+  department_id?: string | null
   semester: number | null
   role: string
   onboarding_done: boolean
+}
+
+// RBAC helpers. Two admin tiers, distinguished by department_id:
+// - Super Admin: role==='admin' AND department_id is null → full access.
+// - Department Admin: role==='admin' AND department_id is set → scoped to
+//   their own department's students only (RLS enforces this server-side).
+export function isAdmin(p: Profile | null): boolean {
+  return p?.role === 'admin'
+}
+export function isSuperAdmin(p: Profile | null): boolean {
+  return p?.role === 'admin' && !p.department_id
+}
+export function isDeptAdmin(p: Profile | null): boolean {
+  return p?.role === 'admin' && !!p.department_id
+}
+
+// College → Department → Year → Students. No classes/sections.
+export interface Department {
+  id: string
+  name: string
+  code: string | null
+}
+
+// Row shape for the Admins panel: an admin profile denormalized with the
+// student's name/register-number (their own roster entry) and department name.
+export interface AdminUser {
+  user_id: string
+  name: string
+  register_number: string | null
+  department_id: string | null
+  department_name: string | null
+  is_super: boolean
 }
 
 export interface Chat {

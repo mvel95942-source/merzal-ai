@@ -3,7 +3,7 @@
 // require user_id = auth.uid().
 import { supabase } from './supabase'
 import { demoApi, isDemo } from './demo'
-import type { Chat, Feedback, FeedbackStatus, FeedbackType, MemoryItem, Message, Profile, Reaction } from './types'
+import type { AdminUser, Chat, Department, Feedback, FeedbackStatus, FeedbackType, MemoryItem, Message, Profile, Reaction } from './types'
 
 async function uid(): Promise<string> {
   const { data } = await supabase.auth.getUser()
@@ -99,7 +99,10 @@ const realApi = {
   },
 
   // ── ADMIN: student roster import ──────────────────────────────────
-  async importStudents(rows: { name: string; mobile: string }[]): Promise<number> {
+  // `department_id`/`year` are optional: a Super Admin may assign every
+  // imported row to a department + year in one pass; a Dept Admin's caller
+  // always passes their own department_id (RLS would reject anything else).
+  async importStudents(rows: { name: string; mobile: string }[], opts?: { department_id?: string | null; year?: number | null }): Promise<number> {
     const seen = new Set<string>()
     const clean = rows
       .map((r) => ({ name: (r.name || '').trim(), mobile: (r.mobile || '').replace(/\D/g, '') }))
@@ -107,20 +110,26 @@ const realApi = {
     if (!clean.length) return 0
     // `students` isn't in the generated DB types yet — cast for these admin calls.
     const { error } = await (supabase as any).from('students').upsert(
-      clean.map((r) => ({ name: r.name, mobile: r.mobile, status: 'pending_profile' })),
+      clean.map((r) => ({
+        name: r.name,
+        mobile: r.mobile,
+        status: 'pending_profile',
+        department_id: opts?.department_id ?? null,
+        year: opts?.year ?? null,
+      })),
       { onConflict: 'mobile', ignoreDuplicates: true },
     )
     if (error) throw error
     return clean.length
   },
 
-  async listStudents(): Promise<{ id: string; name: string; mobile: string; status: string }[]> {
-    const { data } = await (supabase as any).from('students').select('id,name,mobile,status').order('created_at', { ascending: false })
-    return (data ?? []) as { id: string; name: string; mobile: string; status: string }[]
+  async listStudents(): Promise<{ id: string; name: string; mobile: string; status: string; department_id: string | null; year: number | null }[]> {
+    const { data } = await (supabase as any).from('students').select('id,name,mobile,status,department_id,year').order('created_at', { ascending: false })
+    return (data ?? []) as { id: string; name: string; mobile: string; status: string; department_id: string | null; year: number | null }[]
   },
 
-  async addStudent(name: string, enrollment: string): Promise<void> {
-    const r = await phoneAuth({ action: 'admin_add', name, enrollment })
+  async addStudent(name: string, enrollment: string, department_id?: string | null, year?: number | null): Promise<void> {
+    const r = await phoneAuth({ action: 'admin_add', name, enrollment, department_id: department_id ?? null, year: year ?? null })
     if (!r.ok) {
       if (r.error === 'already_exists') throw new Error('A student with that enrollment already exists.')
       if (r.error === 'name_required') throw new Error('Name is required.')
@@ -187,6 +196,78 @@ const realApi = {
 
   async deleteCampusDoc(id: string): Promise<void> {
     const { error } = await (supabase as any).from('pageindex_docs').delete().eq('id', id)
+    if (error) throw error
+  },
+
+  // ── ADMIN: departments (College → Department → Year → Students) ───
+  // Any authed user can read; only a Super Admin can write (RLS-gated).
+  async listDepartments(): Promise<Department[]> {
+    const { data, error } = await (supabase as any).from('departments').select('id,name,code').order('code', { ascending: true })
+    if (error) throw error
+    return (data ?? []) as Department[]
+  },
+
+  async createDepartment(name: string, code: string): Promise<Department> {
+    const { data, error } = await (supabase as any)
+      .from('departments')
+      .insert({ name: name.trim(), code: code.trim().toUpperCase() })
+      .select('id,name,code')
+      .single()
+    if (error) throw new Error(error.message || 'Could not create department.')
+    return data as Department
+  },
+
+  async deleteDepartment(id: string): Promise<void> {
+    const { error } = await (supabase as any).from('departments').delete().eq('id', id)
+    if (error) throw new Error(error.message || 'Could not delete department.')
+  },
+
+  // ── ADMIN: admin roster (Super Admin manages Super + Department Admins) ──
+  async listAdmins(): Promise<AdminUser[]> {
+    const { data: profiles, error } = await (supabase as any).from('user_profiles').select('id,department_id').eq('role', 'admin')
+    if (error) throw error
+    const rows = (profiles ?? []) as { id: string; department_id: string | null }[]
+    if (!rows.length) return []
+
+    const ids = rows.map((r) => r.id)
+    const { data: students } = await (supabase as any).from('students').select('user_id,name,mobile').in('user_id', ids)
+    const studentMap = new Map(((students ?? []) as { user_id: string; name: string; mobile: string }[]).map((s) => [s.user_id, s]))
+
+    const deptIds = [...new Set(rows.map((r) => r.department_id).filter(Boolean))] as string[]
+    let deptMap = new Map<string, string>()
+    if (deptIds.length) {
+      const { data: depts } = await (supabase as any).from('departments').select('id,name').in('id', deptIds)
+      deptMap = new Map(((depts ?? []) as { id: string; name: string }[]).map((d) => [d.id, d.name]))
+    }
+
+    return rows.map((r) => {
+      const s = studentMap.get(r.id)
+      return {
+        user_id: r.id,
+        name: s?.name ?? r.id,
+        register_number: s?.mobile ?? null,
+        department_id: r.department_id,
+        department_name: r.department_id ? deptMap.get(r.department_id) ?? null : null,
+        is_super: !r.department_id,
+      }
+    })
+  },
+
+  async promoteToDeptAdmin(registerNumber: string, department_id: string): Promise<void> {
+    const mobile = registerNumber.trim().replace(/\D/g, '')
+    if (!mobile) throw new Error('Enter a register number.')
+    if (!department_id) throw new Error('Choose a department.')
+    const { data: student, error: sErr } = await (supabase as any).from('students').select('user_id,name').eq('mobile', mobile).maybeSingle()
+    if (sErr) throw sErr
+    if (!student?.user_id) throw new Error('No account found for that register number — the student must sign in at least once before they can be promoted.')
+    const { error } = await (supabase as any).from('user_profiles').update({ role: 'admin', department_id }).eq('id', student.user_id)
+    if (error) throw new Error('Could not update that profile. They may not have a profile row yet.')
+  },
+
+  async demoteAdmin(user_id: string): Promise<void> {
+    const me = await uid()
+    if (user_id === me) throw new Error('You cannot demote yourself.')
+    const { error } = await (supabase as any).from('user_profiles').update({ role: 'student', department_id: null }).eq('id', user_id)
     if (error) throw error
   },
 
