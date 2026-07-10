@@ -90,5 +90,38 @@ export interface Feedback {
 }
 
 // Super Admin analytics dashboard: business metrics returned by the
-// `admin_analytics` RPC (admin-gated server-side). All values are integers.
-export type AdminAnalytics = Record<string, number>
+// `admin_analytics` RPC (admin-gated server-side).
+export interface DailyPoint { d: string; n: number }
+export interface HeatmapPoint { dow: number; hr: number; n: number }
+export interface TopStudent { name: string; register: string | null; n: number }
+
+export interface AdminAnalytics {
+  total_students: number
+  active_students: number
+  total_departments: number
+  total_chats: number
+  total_questions: number
+  questions_today: number
+  questions_yesterday: number
+  questions_7d: number
+  questions_prev_7d: number
+  dau: number
+  wau: number
+  mau: number
+  active_prev_7d: number
+  new_students_7d: number
+  new_students_30d: number
+  feedback_total: number
+  feedback_helpful: number
+  feedback_not_helpful: number
+  feedback_bugs: number
+  feedback_features: number
+  feedback_open: number
+  // Last 30 days, oldest first.
+  questions_daily: DailyPoint[]
+  students_daily: DailyPoint[]
+  // Weekday (0=Sun..6=Sat) × hour-of-day (0-23) activity counts, last 30 days.
+  heatmap: HeatmapPoint[]
+  top_students: TopStudent[]
+  by_mode: { campus: number; world: number }
+}
