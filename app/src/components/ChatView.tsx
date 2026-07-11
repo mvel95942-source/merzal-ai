@@ -84,12 +84,21 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     if (!chatId) return
     const ready = atts.filter((a) => a.status === 'ready')
     const marker = atts.length ? atts.map((a) => `Attachment · ${a.name}`).join('   ') + '\n' : ''
-    const userMsg = await api.addMessage({ chat_id: chatId, role: 'user', content: marker + text, mode: m })
-    const history = [...messages, userMsg]
-    setMessages(history)
-    if (messages.length === 0 && !fromQueue) onFirstMessage(chatId, (text || atts[0]?.name || 'New chat').slice(0, 48))
+    const content = marker + text
+    // Render the user's message INSTANTLY (optimistic). Waiting on the DB insert
+    // before showing it was the send→appear lag. Persist in the background and
+    // swap the temp row for the saved one when it lands.
+    const temp = { id: 'tmp-' + Date.now(), chat_id: chatId, role: 'user' as const, content, mode: m, created_at: new Date().toISOString(), reaction: null } as Message
+    const base = messages
+    setMessages([...base, temp])
+    if (base.length === 0 && !fromQueue) onFirstMessage(chatId, (text || atts[0]?.name || 'New chat').slice(0, 48))
     extractMemories(text).catch(() => {})
-    await generate(history, m, ready)
+    let userMsg: Message = temp
+    try {
+      userMsg = await api.addMessage({ chat_id: chatId, role: 'user', content, mode: m })
+      setMessages((prev) => prev.map((x) => (x.id === temp.id ? userMsg : x)))
+    } catch { /* keep the optimistic message and answer anyway */ }
+    await generate([...base, userMsg], m, ready)
   }
 
   // Stream an assistant reply grounded in memory + retrieved knowledge, then
@@ -100,13 +109,22 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     setDraft('')
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    // Typewriter reveal: the model emits multi-character SSE chunks; we reveal
+    // them one character at a time per animation frame, only speeding up when we
+    // fall far behind so the caret keeps pace with a fast stream (no chunky jumps).
     let started = false
-    // Coalesce token bursts into one render per animation frame. The model can
-    // emit dozens of tokens per second; without this each one triggers a full
-    // WordReveal re-render and the UI feels slower than the stream actually is.
-    let pending = ''
-    let scheduled = false
-    const flush = () => { scheduled = false; if (pending) { const buf = pending; pending = ''; setDraft((d) => d + buf) } }
+    let target = ''   // full text received so far
+    let shown = 0     // characters revealed on screen
+    let done = false
+    let raf = 0
+    const tick = () => {
+      if (shown < target.length) {
+        const remaining = target.length - shown
+        shown += Math.max(1, Math.round(remaining / 6))
+        setDraft(target.slice(0, shown))
+      }
+      raf = (!done || shown < target.length) ? requestAnimationFrame(tick) : 0
+    }
     try {
       const lastUser = [...history].reverse().find((x) => x.role === 'user')?.content ?? ''
       const [mem, know] = await Promise.all([memoryContext(), knowledgeFor(m).retrieve(lastUser, m)])
@@ -120,18 +138,20 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           signal: ctrl.signal,
         },
         (tok) => {
-          if (!started) { started = true; setThinking(false); setStreaming(true) }
-          pending += tok
-          if (!scheduled) { scheduled = true; requestAnimationFrame(flush) }
+          if (!started) { started = true; setThinking(false); setStreaming(true); raf = requestAnimationFrame(tick) }
+          target += tok
         },
       )
-      flush() // drain anything queued for the next frame
+      done = true
+      cancelAnimationFrame(raf)
       const saved = await api.addMessage({ chat_id: chatId, role: 'assistant', content: full, mode: m })
       setMessages((prev) => [...prev, saved])
       await api.touchChat(chatId)
     } catch {
       // aborted or endpoint error — drop the partial draft
     } finally {
+      done = true
+      cancelAnimationFrame(raf)
       setThinking(false)
       setStreaming(false)
       setDraft('')

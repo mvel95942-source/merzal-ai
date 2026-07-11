@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { api, emailToRoll } from './lib/api'
 import { hasSupabase } from './lib/supabase'
 import { brand } from './lib/brand'
@@ -9,9 +9,11 @@ import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { Settings } from './components/Settings'
 import { SharedView } from './components/SharedView'
-import { AdminImport } from './components/AdminImport'
-import { FeedbackInbox } from './components/FeedbackInbox'
-import { AnalyticsDashboard } from './components/AnalyticsDashboard'
+import { InstallPrompt } from './components/InstallPrompt'
+// Admin-only surfaces are code-split so students never download xlsx/charts.
+const AdminImport = lazy(() => import('./components/AdminImport').then((m) => ({ default: m.AdminImport })))
+const FeedbackInbox = lazy(() => import('./components/FeedbackInbox').then((m) => ({ default: m.FeedbackInbox })))
+const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard })))
 import { ShareSheet } from './components/ShareSheet'
 import type { ShareTarget } from './components/ShareSheet'
 import { exportPdf, exportText } from './lib/export'
@@ -99,15 +101,17 @@ export default function App() {
 
   if (shareToken) return <SharedView token={shareToken} />
   // #/admin is open to any admin (Super or Department); feedback + analytics
-  // are Super Admin only — both here and server-side via RLS.
-  if (adminRoute && phase === 'app' && isAdmin(profile)) return <AdminImport profile={profile} onClose={() => { window.location.hash = '' }} />
-  if (feedbackRoute && phase === 'app' && isSuperAdmin(profile)) return <FeedbackInbox onClose={() => { window.location.hash = '' }} />
-  if (analyticsRoute && phase === 'app' && isSuperAdmin(profile)) return <AnalyticsDashboard onClose={() => { window.location.hash = '' }} />
+  // are Super Admin only — both here and server-side via RLS. Lazy surfaces are
+  // wrapped in Suspense so their chunk loads on demand.
+  const routeFallback = <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)', background: 'var(--paper-app)' }}>Loading…</div>
+  if (adminRoute && phase === 'app' && isAdmin(profile)) return <Suspense fallback={routeFallback}><AdminImport profile={profile} onClose={() => { window.location.hash = '' }} /></Suspense>
+  if (feedbackRoute && phase === 'app' && isSuperAdmin(profile)) return <Suspense fallback={routeFallback}><FeedbackInbox onClose={() => { window.location.hash = '' }} /></Suspense>
+  if (analyticsRoute && phase === 'app' && isSuperAdmin(profile)) return <Suspense fallback={routeFallback}><AnalyticsDashboard onClose={() => { window.location.hash = '' }} /></Suspense>
 
   if (phase === 'loading') {
     return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)', background: 'var(--paper)' }}>Loading {brand.name}…</div>
   }
-  if (phase === 'login') return <Login />
+  if (phase === 'login') return <><Login /><InstallPrompt /></>
 
   const closeDrawer = () => setDrawerOpen(false)
 
@@ -191,6 +195,7 @@ export default function App() {
 
       {shareItem && <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />}
       {conn === 'offline' && <OfflineToast queued={queued} />}
+      <InstallPrompt />
     </div>
   )
 }

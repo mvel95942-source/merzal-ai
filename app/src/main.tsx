@@ -13,3 +13,10 @@ initBrand().finally(() => {
     </StrictMode>,
   )
 })
+
+// Register the service worker (PWA install + faster repeat loads). Best-effort.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* offline/unsupported — ignore */ })
+  })
+}
