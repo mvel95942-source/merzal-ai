@@ -1,0 +1,16 @@
+{
+  "name": "Merzal AI",
+  "short_name": "Merzal AI",
+  "description": "Your private campus AI assistant — courses, deadlines, placements and more.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#212121",
+  "theme_color": "#212121",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
