@@ -113,6 +113,7 @@ button { cursor: pointer; background: none; }
 @keyframes mz-pulse { 0%, 100% { opacity: .35; transform: scale(.82) } 50% { opacity: 1; transform: scale(1) } }
 @keyframes mz-fadein { 0% { opacity: 0; transform: translateY(8px) } 100% { opacity: 1; transform: none } }
 @keyframes mz-rise { 0% { opacity: 0; transform: translateY(14px) } 100% { opacity: 1; transform: none } }
+@keyframes mz-drop { 0% { opacity: 0; transform: translateY(-16px) } 100% { opacity: 1; transform: none } }
 @keyframes mz-spin { to { transform: rotate(360deg) } }
 
 /* Rendered assistant markdown */

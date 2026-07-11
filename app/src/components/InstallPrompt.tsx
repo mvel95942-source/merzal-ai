@@ -62,7 +62,7 @@ export function InstallPrompt() {
   }
 
   return (
-    <div style={{ position: 'fixed', left: '50%', bottom: 'max(16px, env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 90, width: 'min(440px, calc(100vw - 24px))', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px 12px 14px', borderRadius: 16, background: 'var(--surface)', border: '1px solid var(--line)', boxShadow: 'var(--shadow-pop)', animation: 'mz-rise .28s both' }}>
+    <div style={{ position: 'fixed', top: 'max(10px, env(safe-area-inset-top))', left: 12, right: 12, margin: '0 auto', zIndex: 90, width: 'auto', maxWidth: 440, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px 12px 14px', borderRadius: 16, background: 'var(--surface)', border: '1px solid var(--line)', boxShadow: 'var(--shadow-pop)', animation: 'mz-drop .28s both' }}>
       <span style={{ flex: 'none' }}><Logo size={38} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Install Merzal AI</div>
