@@ -93,12 +93,14 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     setMessages([...base, temp])
     if (base.length === 0 && !fromQueue) onFirstMessage(chatId, (text || atts[0]?.name || 'New chat').slice(0, 48))
     extractMemories(text).catch(() => {})
-    let userMsg: Message = temp
-    try {
-      userMsg = await api.addMessage({ chat_id: chatId, role: 'user', content, mode: m })
-      setMessages((prev) => prev.map((x) => (x.id === temp.id ? userMsg : x)))
-    } catch { /* keep the optimistic message and answer anyway */ }
-    await generate([...base, userMsg], m, ready)
+    // Start generating IMMEDIATELY so the thinking indicator appears the instant
+    // the message is sent — do NOT wait on the DB insert (that round-trip was the
+    // blank gap before "thinking"). Persist in the background and swap the temp
+    // row for the saved one when it lands.
+    api.addMessage({ chat_id: chatId, role: 'user', content, mode: m })
+      .then((saved) => setMessages((prev) => prev.map((x) => (x.id === temp.id ? saved : x))))
+      .catch(() => { /* keep the optimistic message */ })
+    await generate([...base, temp], m, ready)
   }
 
   // Stream an assistant reply grounded in memory + retrieved knowledge, then
