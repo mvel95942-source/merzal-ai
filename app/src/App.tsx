@@ -53,14 +53,9 @@ export default function App() {
     const session = await api.getSession()
     if (!session) { setPhase('login'); return }
     setAccount(emailToRoll(session.user.email) ?? 'You')
-    const prof = await api.getProfile()
-    if (prof && !prof.onboarding_done) {
-      await api.upsertProfile({ onboarding_done: true })
-      setProfile({ ...prof, onboarding_done: true })
-    } else {
-      setProfile(prof)
-    }
-    // Continue a conversation opened from a share link.
+
+    // Continue a conversation opened from a share link (rare) — must resolve
+    // before the chat list so the imported chat appears in it.
     let openId = localStorage.getItem('merzal_open_chat')
     const contTok = localStorage.getItem('merzal_continue_token')
     if (contTok) {
@@ -68,7 +63,16 @@ export default function App() {
       localStorage.removeItem('merzal_continue_token')
     }
     localStorage.removeItem('merzal_open_chat')
-    const list = await api.listChats()
+
+    // Profile and chat list are independent reads — fetch them together instead
+    // of one-after-another. This sequential waterfall was pure latency shown as
+    // the "Loading…" screen; parallel saves a full Supabase round-trip.
+    const [prof, list] = await Promise.all([api.getProfile(), api.listChats()])
+    setProfile(prof && !prof.onboarding_done ? { ...prof, onboarding_done: true } : prof)
+    // First-ever login: persist onboarding_done in the background — don't block
+    // the app render on that write.
+    if (prof && !prof.onboarding_done) api.upsertProfile({ onboarding_done: true }).catch(() => {})
+
     setChats(list)
     setActiveId(openId ?? list[0]?.id ?? null)
     setPhase('app')
