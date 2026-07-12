@@ -1,14 +1,18 @@
 // Merzal AI — LLM gateway edge function.
 //
 // Routing:
-//   • Campus mode → PageIndex RETRIEVES admin-uploaded docs, DeepSeek ANSWERS
+//   • Campus mode → hierarchical TREE SEARCH over the PageIndex index: our LLM
+//     reasons over the doc's section tree, picks the relevant nodes, and DeepSeek
+//     answers from just those sections (no whole-document read). Falls back to
+//     full-OCR grounding if the tree is unavailable.
 //   • World mode / text → DeepSeek V4 Flash (AICredits)
 //   • Images → Gemini vision
 //   • Fallback chain on 429/5xx/network: DeepSeek → Gemma 4 → Gemini flash
 //
-// PageIndex is RETRIEVAL ONLY; our own LLM reasons + answers. Campus doc ids
-// come from public.pageindex_docs (admin-managed), falling back to the
-// PAGEINDEX_DOC_ID secret. All API keys come from Supabase secrets.
+// PageIndex is the document INDEX/RETRIEVAL layer only — never its chat/answer
+// model; our own LLM reasons + answers. Campus doc ids come from
+// public.pageindex_docs (admin-managed), falling back to the PAGEINDEX_DOC_ID
+// secret. All API keys come from Supabase secrets.
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 
 const FALLBACK: Record<string, string> = {
@@ -49,6 +53,11 @@ function systemPrompt(mode: string, context: string): string {
 const GROUND_TTL_MS = 10 * 60_000 // 10 min — occasional refresh if docs change
 let docIdsCache: { at: number; ids: string[] } | null = null
 let piCache: { at: number; ids: string; text: string } | null = null
+let treeCache: { at: number; ids: string; nodes: FlatNode[] } | null = null
+
+// A section of the PageIndex hierarchical tree, flattened for LLM reasoning.
+type FlatNode = { id: string; title: string; summary: string; text: string }
+type TreeNode = { node_id?: string; title?: string; summary?: string; text?: string; nodes?: TreeNode[] }
 
 // Campus doc ids: admin-managed table first, else the PAGEINDEX_DOC_ID secret.
 async function campusDocIds(supabase: SupabaseClient): Promise<string[]> {
@@ -67,11 +76,8 @@ async function campusDocIds(supabase: SupabaseClient): Promise<string[]> {
 }
 
 // PageIndex is RETRIEVAL / the document index only — pull each campus doc's full
-// OCR markdown and hand the WHOLE thing to OUR LLM (DeepSeek). DeepSeek does the
-// retrieval: it reasons over the entire document and answers. We never use
-// PageIndex's own chat/answer model. Grounding is UNLIMITED — no character cap,
-// so nothing in the campus doc is ever truncated away. Cached in module scope so
-// the fetch runs once (per 10-min TTL), not on every message.
+// OCR markdown and hand the WHOLE thing to OUR LLM (DeepSeek). Used as the
+// FALLBACK when hierarchical tree search is unavailable. Cached (10-min TTL).
 async function pageIndexContext(docs: string[]): Promise<string> {
   const key = Deno.env.get('PAGEINDEX_API_KEY')
   if (!key || !docs.length) return ''
@@ -94,6 +100,74 @@ async function pageIndexContext(docs: string[]): Promise<string> {
   const text = parts.join('\n\n')
   piCache = { at: Date.now(), ids, text }
   return text
+}
+
+// Fetch the PageIndex hierarchical TREE (node_id + title + summary + text) and
+// flatten it. This is the index PageIndex builds — we reason over it instead of
+// reading the whole document. Cached so the fetch runs once per TTL.
+async function campusTree(docs: string[]): Promise<FlatNode[]> {
+  const key = Deno.env.get('PAGEINDEX_API_KEY')
+  if (!key || !docs.length) return []
+  const ids = docs.join(',')
+  if (treeCache && treeCache.ids === ids && Date.now() - treeCache.at < GROUND_TTL_MS) return treeCache.nodes
+  const flat: FlatNode[] = []
+  const walk = (n: TreeNode) => {
+    if (n.node_id) flat.push({ id: n.node_id, title: n.title ?? '', summary: n.summary ?? '', text: n.text ?? '' })
+    for (const c of n.nodes ?? []) walk(c)
+  }
+  for (const doc of docs) {
+    try {
+      const res = await fetch(`https://api.pageindex.ai/doc/${doc}/?type=tree&summary=true`, { headers: { api_key: key } })
+      if (!res.ok) continue
+      const data = await res.json()
+      const roots = Array.isArray(data.result) ? data.result : [data.result]
+      for (const root of roots) if (root) walk(root as TreeNode)
+    } catch { /* tree unavailable — caller falls back to full OCR */ }
+  }
+  treeCache = { at: Date.now(), ids, nodes: flat }
+  return flat
+}
+
+// Hierarchical reasoning: give OUR LLM the tree's titles + summaries and let it
+// pick the node_ids relevant to this query — unlimited (as many as it wants), no
+// whole-document read. One small, fast call; returns [] on any failure so the
+// caller can fall back to full-OCR grounding.
+async function selectNodes(query: string, nodes: FlatNode[]): Promise<string[]> {
+  const key = Deno.env.get('AICREDITS_API_KEY')
+  if (!key || !nodes.length || !query.trim()) return []
+  const toc = nodes.map((n) => `- ${n.id}: ${n.title}${n.summary ? ` — ${n.summary}` : ''}`).join('\n')
+  const prompt =
+    'You are given a user query and the section tree (node_id: title — summary) of a campus document. ' +
+    'Return the node_ids of ALL sections that could contain the answer — include generously if unsure. ' +
+    'Respond with ONLY JSON: {"node_list":["<id>", ...]}.\n\n' +
+    `Query: ${query}\n\nTree:\n${toc}`
+  try {
+    const res = await fetch(`${env('AICREDITS_BASE_URL')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: env('AICREDITS_MODEL'), stream: false, temperature: 0, max_tokens: 400, messages: [{ role: 'user', content: prompt }] }),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    const content: string = data.choices?.[0]?.message?.content ?? ''
+    const m = content.match(/\{[\s\S]*\}/)
+    const list = m ? JSON.parse(m[0])?.node_list : null
+    return Array.isArray(list) ? list.map(String) : []
+  } catch { return [] }
+}
+
+// Campus grounding via hierarchical tree search: tree → LLM picks nodes → pull
+// just those nodes' text. Falls back to full-OCR grounding whenever the tree or
+// its node text isn't usable, so campus mode is never left ungrounded.
+async function campusGrounding(docs: string[], query: string): Promise<string> {
+  const nodes = await campusTree(docs)
+  if (nodes.length) {
+    const picked = await selectNodes(query, nodes)
+    const chosen = picked.length ? nodes.filter((n) => picked.includes(n.id)) : nodes
+    const grounding = chosen.map((n) => (n.text ? `## ${n.title}\n${n.text}` : '')).filter(Boolean).join('\n\n')
+    if (grounding.trim()) return grounding
+  }
+  return pageIndexContext(docs) // tree/text unavailable → full-document fallback
 }
 
 // One upstream attempt. Streaming Response on success, else null.
@@ -124,11 +198,14 @@ Deno.serve(async (req) => {
 
   const images = hasImageParts(messages)
 
-  // Campus grounding: PageIndex retrieves (admin docs), DeepSeek answers.
+  // Campus grounding: hierarchical tree search over the PageIndex index (our LLM
+  // picks the relevant sections), then DeepSeek answers from just those sections.
   let ctx = context
   if (mode === 'campus' && !images) {
-    const pi = await pageIndexContext(await campusDocIds(supabase))
-    if (pi) ctx = ctx ? `${ctx}\n\n${pi}` : pi
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+    const query = typeof lastUser?.content === 'string' ? lastUser.content : ''
+    const grounding = await campusGrounding(await campusDocIds(supabase), query)
+    if (grounding) ctx = ctx ? `${ctx}\n\n${grounding}` : grounding
   }
 
   const chat: Msg[] = [{ role: 'system', content: systemPrompt(mode, ctx) }, ...messages]
