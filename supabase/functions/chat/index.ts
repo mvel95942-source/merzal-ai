@@ -66,20 +66,19 @@ async function campusDocIds(supabase: SupabaseClient): Promise<string[]> {
   return ids
 }
 
-// PageIndex RETRIEVAL only: pull each doc's full OCR markdown as grounding text.
-// (The tree/summary view collapses small docs to just the title — OCR gives the
-// actual body content that DeepSeek then reasons over.) Result is cached so the
-// slow per-message fetch runs once, not on every turn.
+// PageIndex is RETRIEVAL / the document index only — pull each campus doc's full
+// OCR markdown and hand the WHOLE thing to OUR LLM (DeepSeek). DeepSeek does the
+// retrieval: it reasons over the entire document and answers. We never use
+// PageIndex's own chat/answer model. Grounding is UNLIMITED — no character cap,
+// so nothing in the campus doc is ever truncated away. Cached in module scope so
+// the fetch runs once (per 10-min TTL), not on every message.
 async function pageIndexContext(docs: string[]): Promise<string> {
   const key = Deno.env.get('PAGEINDEX_API_KEY')
   if (!key || !docs.length) return ''
   const ids = docs.join(',')
   if (piCache && piCache.ids === ids && Date.now() - piCache.at < GROUND_TTL_MS) return piCache.text
   const parts: string[] = []
-  let total = 0
-  const CAP = 40000
   for (const doc of docs) {
-    if (total >= CAP) break
     try {
       const res = await fetch(`https://api.pageindex.ai/doc/${doc}/?type=ocr`, { headers: { api_key: key } })
       if (!res.ok) continue
@@ -88,14 +87,11 @@ async function pageIndexContext(docs: string[]): Promise<string> {
       const pages = r && typeof r === 'object' ? Object.values(r).flat() : []
       for (const pg of pages as Array<{ markdown?: string }>) {
         const md = pg?.markdown
-        if (!md) continue
-        parts.push(md)
-        total += md.length
-        if (total >= CAP) break
+        if (md) parts.push(md)
       }
     } catch { /* answer ungrounded on failure */ }
   }
-  const text = parts.join('\n\n').slice(0, CAP)
+  const text = parts.join('\n\n')
   piCache = { at: Date.now(), ids, text }
   return text
 }
