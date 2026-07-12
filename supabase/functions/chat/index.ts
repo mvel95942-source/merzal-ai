@@ -1,232 +1,159 @@
 // Merzal AI — LLM gateway edge function.
 //
-// The model choice is a BACKEND decision. The client sends only the mode
-// (campus | world); this function maps that mode to a provider + model from
-// server-side config, holds every provider API key as a Supabase secret (keys
-// never reach the browser), verifies the caller's Supabase JWT, then proxies an
-// OpenAI-compatible streaming chat completion back as Server-Sent Events.
+// Routing:
+//   • Campus mode → PageIndex RETRIEVES admin-uploaded docs, DeepSeek ANSWERS
+//   • World mode / text → DeepSeek V4 Flash (AICredits)
+//   • Images → Gemini vision
+//   • Fallback chain on 429/5xx/network: DeepSeek → Gemma 4 → Gemini flash
 //
-// Per-mode routing (secrets/config — set what you use):
-//   CAMPUS_PROVIDER / CAMPUS_MODEL    (defaults: openai / gpt-4o-mini)
-//   WORLD_PROVIDER  / WORLD_MODEL     (defaults: openai / gpt-4o-mini)
-// Provider credentials (set the ones your providers need):
-//   OPENAI_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY,
-//   LITELLM_BASE_URL + LITELLM_API_KEY, VLLM_BASE_URL (+ optional VLLM_API_KEY)
-//
-// Deploy:  supabase functions deploy chat   (or via MCP)
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+// PageIndex is RETRIEVAL ONLY; our own LLM reasons + answers. Campus doc ids
+// come from public.pageindex_docs (admin-managed), falling back to the
+// PAGEINDEX_DOC_ID secret. All API keys come from Supabase secrets.
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 
-const DEFAULT_MODEL: Record<ProviderId, string> = {
-  openai: 'gpt-4o-mini',
-  deepseek: 'deepseek-chat',
-  gemini: 'gemini-2.0-flash',
-  openrouter: 'openai/gpt-4o-mini',
-  litellm: 'gpt-4o-mini',
-  vllm: 'llama3',
-  aicredits: 'deepseek/deepseek-v4-flash',
+const FALLBACK: Record<string, string> = {
+  AICREDITS_BASE_URL: 'https://aicredits.in/v1',
+  AICREDITS_MODEL: 'deepseek/deepseek-v4-flash',
+  GEMINI_MODELS: 'gemma-4-31b-it,gemini-2.5-flash,gemini-2.0-flash',
+  GEMINI_VISION_MODELS: 'gemini-2.5-flash,gemini-2.0-flash',
 }
-
-// Map a chat mode to the provider + model the admin configured for it.
-function routeForMode(mode: string): { provider: ProviderId; model: string } {
-  const prefix = mode === 'world' ? 'WORLD' : 'CAMPUS'
-  // Default to AICredits → DeepSeek V4 Flash; override per mode with
-  // CAMPUS_PROVIDER / CAMPUS_MODEL / WORLD_PROVIDER / WORLD_MODEL secrets.
-  const provider = (Deno.env.get(`${prefix}_PROVIDER`) as ProviderId) || 'aicredits'
-  const model = Deno.env.get(`${prefix}_MODEL`) || DEFAULT_MODEL[provider] || 'deepseek/deepseek-v4-flash'
-  return { provider, model }
-}
+const env = (k: string) => Deno.env.get(k) || FALLBACK[k] || ''
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai'
 
-type ProviderId = 'openai' | 'deepseek' | 'gemini' | 'openrouter' | 'litellm' | 'vllm' | 'aicredits'
+type Msg = { role: string; content: unknown }
 
-interface Upstream {
-  base: string
-  key?: string
-  extraHeaders?: Record<string, string>
-}
-
-function resolveProvider(p: ProviderId): Upstream | { error: string } {
-  const env = (k: string) => Deno.env.get(k) ?? ''
-  switch (p) {
-    case 'openai':
-      return env('OPENAI_API_KEY')
-        ? { base: 'https://api.openai.com/v1', key: env('OPENAI_API_KEY') }
-        : { error: 'OPENAI_API_KEY not set' }
-    case 'deepseek':
-      return env('DEEPSEEK_API_KEY')
-        ? { base: 'https://api.deepseek.com/v1', key: env('DEEPSEEK_API_KEY') }
-        : { error: 'DEEPSEEK_API_KEY not set' }
-    case 'gemini':
-      return env('GEMINI_API_KEY')
-        ? { base: 'https://generativelanguage.googleapis.com/v1beta/openai', key: env('GEMINI_API_KEY') }
-        : { error: 'GEMINI_API_KEY not set' }
-    case 'aicredits':
-      // AICredits OpenAI-compatible aggregator (https://aicredits.in). Set the
-      // key as a Supabase secret; pick the model via CAMPUS_MODEL / WORLD_MODEL.
-      return env('AICREDITS_API_KEY')
-        ? { base: 'https://aicredits.in/v1', key: env('AICREDITS_API_KEY') }
-        : { error: 'AICREDITS_API_KEY not set' }
-    case 'openrouter':
-      return env('OPENROUTER_API_KEY')
-        ? {
-            base: 'https://openrouter.ai/api/v1',
-            key: env('OPENROUTER_API_KEY'),
-            extraHeaders: { 'HTTP-Referer': 'https://merzal.ai', 'X-Title': 'Merzal AI' },
-          }
-        : { error: 'OPENROUTER_API_KEY not set' }
-    case 'litellm':
-      return env('LITELLM_BASE_URL')
-        ? { base: env('LITELLM_BASE_URL').replace(/\/$/, ''), key: env('LITELLM_API_KEY') }
-        : { error: 'LITELLM_BASE_URL not set' }
-    case 'vllm':
-      return env('VLLM_BASE_URL')
-        ? { base: env('VLLM_BASE_URL').replace(/\/$/, ''), key: env('VLLM_API_KEY') }
-        : { error: 'VLLM_BASE_URL not set' }
-    default:
-      return { error: `unknown provider ${p}` }
-  }
-}
-
-// True when any turn carries an OpenAI-style image_url content part.
-function hasImageParts(messages: { role: string; content: unknown }[]): boolean {
-  return messages.some((m) =>
-    Array.isArray(m.content) &&
-    (m.content as { type?: string }[]).some((p) => p?.type === 'image_url'))
-}
-
-// PageIndex is used for RETRIEVAL only: pull the indexed campus doc content and
-// return it as grounding context. DeepSeek (the routed provider) writes the
-// answer. type=ocr returns the document markdown per page (result[].markdown).
-// The campus document is static, but this USED TO re-fetch the entire OCR from
-// PageIndex on EVERY message — a slow, blocking round-trip (plus parsing a large
-// JSON payload) that delayed the first token even though the model itself is
-// fast. That was the "system is slow" bug: the stall was ours, not DeepSeek's.
-// Cache the result in module scope (kept alive across warm invocations) so the
-// fetch happens once and every subsequent message reuses it instantly.
-let piCache: { at: number; docIds: string; text: string } | null = null
-const PI_TTL_MS = 10 * 60_000 // 10 min — occasional refresh in case the doc changes
-
-async function pageIndexContext(key: string, docIds: string): Promise<string> {
-  if (piCache && piCache.docIds === docIds && Date.now() - piCache.at < PI_TTL_MS) {
-    return piCache.text
-  }
-  const docs = docIds.split(',').map((s) => s.trim()).filter(Boolean)
-  const parts: string[] = []
-  for (const doc of docs) {
-    try {
-      const res = await fetch(`https://api.pageindex.ai/doc/${doc}/?type=ocr`, { headers: { api_key: key } })
-      if (!res.ok) continue
-      const json = await res.json()
-      const pages = json.result ?? []
-      const md = (Array.isArray(pages) ? pages : [pages])
-        .map((p: { markdown?: string; text?: string }) => (p.markdown ?? p.text ?? '').trim())
-        .filter(Boolean).join('\n\n')
-      if (md) parts.push(md)
-    } catch { /* skip this doc on error */ }
-  }
-  const text = parts.join('\n\n---\n\n').slice(0, 60_000).trim()
-  piCache = { at: Date.now(), docIds, text }
-  return text
+function hasImageParts(messages: Msg[]): boolean {
+  return messages.some((m) => Array.isArray(m.content) && (m.content as { type?: string }[]).some((p) => p?.type === 'image_url'))
 }
 
 function systemPrompt(mode: string, context: string): string {
-  const base =
-    mode === 'campus'
-      ? "You are a private campus assistant running on the university's own infrastructure. Be concise, helpful, and accurate. Ground answers in the provided campus context when present and make clear the data stays on campus."
-      : 'You are Merzal AI, a helpful, concise assistant.'
-  const multimodal =
-    ' When the user attaches images or files, read them and reference their contents directly in your answer.'
-  return context ? `${base}${multimodal}\n\nContext:\n${context}` : `${base}${multimodal}`
+  const base = mode === 'campus'
+    ? "You are a private campus assistant. Be concise, helpful, and accurate. Ground answers in the provided campus context when present; if the context doesn't cover it, say you don't have that information."
+    : 'You are Merzal AI, a helpful, concise assistant.'
+  return context ? `${base}\n\nContext:\n${context}` : base
+}
+
+// ── Grounding cache ───────────────────────────────────────────────────────
+// The campus doc set and its OCR are effectively static, but this function
+// previously hit the pageindex_docs TABLE and re-fetched the FULL doc OCR from
+// PageIndex on EVERY message — two blocking round-trips (plus a large JSON
+// parse) before DeepSeek could emit its first token. That was the "system is
+// slow" bug: the stall was ours, not the model's. Cache both in module scope
+// (kept across warm invocations) so grounding is fetched once, then reused.
+const GROUND_TTL_MS = 10 * 60_000 // 10 min — occasional refresh if docs change
+let docIdsCache: { at: number; ids: string[] } | null = null
+let piCache: { at: number; ids: string; text: string } | null = null
+
+// Campus doc ids: admin-managed table first, else the PAGEINDEX_DOC_ID secret.
+async function campusDocIds(supabase: SupabaseClient): Promise<string[]> {
+  if (docIdsCache && Date.now() - docIdsCache.at < GROUND_TTL_MS) return docIdsCache.ids
+  let ids: string[] = []
+  try {
+    const { data } = await supabase.from('pageindex_docs').select('doc_id')
+    ids = (data ?? []).map((r: { doc_id: string }) => r.doc_id).filter(Boolean)
+  } catch { /* fall through to env */ }
+  if (!ids.length) {
+    const envDoc = Deno.env.get('PAGEINDEX_DOC_ID') || ''
+    ids = envDoc ? envDoc.split(',').map((s) => s.trim()).filter(Boolean) : []
+  }
+  docIdsCache = { at: Date.now(), ids }
+  return ids
+}
+
+// PageIndex RETRIEVAL only: pull each doc's full OCR markdown as grounding text.
+// (The tree/summary view collapses small docs to just the title — OCR gives the
+// actual body content that DeepSeek then reasons over.) Result is cached so the
+// slow per-message fetch runs once, not on every turn.
+async function pageIndexContext(docs: string[]): Promise<string> {
+  const key = Deno.env.get('PAGEINDEX_API_KEY')
+  if (!key || !docs.length) return ''
+  const ids = docs.join(',')
+  if (piCache && piCache.ids === ids && Date.now() - piCache.at < GROUND_TTL_MS) return piCache.text
+  const parts: string[] = []
+  let total = 0
+  const CAP = 40000
+  for (const doc of docs) {
+    if (total >= CAP) break
+    try {
+      const res = await fetch(`https://api.pageindex.ai/doc/${doc}/?type=ocr`, { headers: { api_key: key } })
+      if (!res.ok) continue
+      const data = await res.json()
+      const r = data.result
+      const pages = r && typeof r === 'object' ? Object.values(r).flat() : []
+      for (const pg of pages as Array<{ markdown?: string }>) {
+        const md = pg?.markdown
+        if (!md) continue
+        parts.push(md)
+        total += md.length
+        if (total >= CAP) break
+      }
+    } catch { /* answer ungrounded on failure */ }
+  }
+  const text = parts.join('\n\n').slice(0, CAP)
+  piCache = { at: Date.now(), ids, text }
+  return text
+}
+
+// One upstream attempt. Streaming Response on success, else null.
+async function tryUpstream(base: string, key: string, model: string, messages: Msg[]): Promise<Response | null> {
+  try {
+    const up = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model, stream: true, messages }),
+    })
+    return up.ok && up.body ? up : null
+  } catch { return null }
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
 
-  // ── AuthN: require a valid Supabase user ──────────────────────────
   const authHeader = req.headers.get('Authorization') ?? ''
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: authHeader } } },
-  )
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader } } })
   const { data: userData, error: authErr } = await supabase.auth.getUser()
   if (authErr || !userData.user) return json({ error: 'unauthorized' }, 401)
 
-  // `content` is `string | OpenAIPart[]` — when the user attached images, the
-  // client sends multimodal parts. Pass it through verbatim.
-  let body: { mode?: string; context?: string; messages: { role: string; content: unknown }[] }
-  try {
-    body = await req.json()
-  } catch {
-    return json({ error: 'invalid json' }, 400)
-  }
-
+  let body: { mode?: string; context?: string; messages: Msg[] }
+  try { body = await req.json() } catch { return json({ error: 'invalid json' }, 400) }
   const { mode = 'campus', context = '', messages } = body
   if (!Array.isArray(messages) || messages.length === 0) return json({ error: 'messages required' }, 400)
 
-  // Campus mode: PageIndex RETRIEVES the indexed campus content; DeepSeek (the
-  // routed provider) writes the answer. Grounding is folded into the context.
-  // Text-only, so skip when the turn carries images.
-  let groundedContext = context
-  const PI_KEY = Deno.env.get('PAGEINDEX_API_KEY')
-  const PI_DOC = Deno.env.get('PAGEINDEX_DOC_ID')
-  if (mode === 'campus' && PI_KEY && PI_DOC && !hasImageParts(messages)) {
-    const campusDoc = await pageIndexContext(PI_KEY, PI_DOC)
-    if (campusDoc) {
-      groundedContext = [context, `Campus knowledge — answer from this document; if it isn't covered here, say you don't have that information:\n${campusDoc}`]
-        .filter(Boolean).join('\n\n')
-    }
+  const images = hasImageParts(messages)
+
+  // Campus grounding: PageIndex retrieves (admin docs), DeepSeek answers.
+  let ctx = context
+  if (mode === 'campus' && !images) {
+    const pi = await pageIndexContext(await campusDocIds(supabase))
+    if (pi) ctx = ctx ? `${ctx}\n\n${pi}` : pi
   }
 
-  // Backend decides which provider + model serves this mode.
-  let { provider, model } = routeForMode(mode)
-  // Image requests can't run on a text-only model (e.g. DeepSeek V4 Flash), so
-  // route them to Gemini vision when GEMINI_API_KEY is available.
-  if (hasImageParts(messages) && Deno.env.get('GEMINI_API_KEY')) {
-    provider = 'gemini'
-    model = Deno.env.get('VISION_MODEL') || 'gemini-2.0-flash'
-  }
-  const up = resolveProvider(provider)
-  if ('error' in up) return json({ error: up.error }, 501) // 501 → client uses stub
+  const chat: Msg[] = [{ role: 'system', content: systemPrompt(mode, ctx) }, ...messages]
 
-  const payload = {
-    model,
-    stream: true,
-    messages: [{ role: 'system', content: systemPrompt(mode, groundedContext) }, ...messages.map((m) => ({ role: m.role, content: m.content }))],
+  // Provider fallback chain.
+  const attempts: { base: string; key: string; model: string }[] = []
+  if (images) {
+    for (const m of env('GEMINI_VISION_MODELS').split(',').map((s) => s.trim()).filter(Boolean)) attempts.push({ base: GEMINI_BASE, key: Deno.env.get('GEMINI_API_KEY') || '', model: m })
+  } else {
+    if (Deno.env.get('AICREDITS_API_KEY')) attempts.push({ base: env('AICREDITS_BASE_URL'), key: Deno.env.get('AICREDITS_API_KEY')!, model: env('AICREDITS_MODEL') })
+    for (const m of env('GEMINI_MODELS').split(',').map((s) => s.trim()).filter(Boolean)) attempts.push({ base: GEMINI_BASE, key: Deno.env.get('GEMINI_API_KEY') || '', model: m })
   }
 
-  let upstream: Response
-  try {
-    upstream = await fetch(`${up.base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(up.key ? { Authorization: `Bearer ${up.key}` } : {}),
-        ...(up.extraHeaders ?? {}),
-      },
-      body: JSON.stringify(payload),
-    })
-  } catch (e) {
-    return json({ error: `upstream fetch failed: ${e}` }, 502)
+  for (const a of attempts) {
+    if (!a.key) continue
+    const up = await tryUpstream(a.base, a.key, a.model, chat)
+    if (up) return new Response(up.body, { headers: { ...CORS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' } })
   }
-
-  if (!upstream.ok || !upstream.body) {
-    const detail = await upstream.text().catch(() => '')
-    return json({ error: `upstream ${upstream.status}`, detail: detail.slice(0, 500) }, 502)
-  }
-
-  // Pipe the upstream SSE stream straight back to the client.
-  return new Response(upstream.body, {
-    headers: { ...CORS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
-  })
+  return json({ error: 'all providers failed' }, 502)
 })
 
-function json(obj: unknown, status = 200): Response {
+function json(obj: unknown, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 }
