@@ -102,7 +102,19 @@ function hasImageParts(messages: { role: string; content: unknown }[]): boolean 
 // PageIndex is used for RETRIEVAL only: pull the indexed campus doc content and
 // return it as grounding context. DeepSeek (the routed provider) writes the
 // answer. type=ocr returns the document markdown per page (result[].markdown).
+// The campus document is static, but this USED TO re-fetch the entire OCR from
+// PageIndex on EVERY message — a slow, blocking round-trip (plus parsing a large
+// JSON payload) that delayed the first token even though the model itself is
+// fast. That was the "system is slow" bug: the stall was ours, not DeepSeek's.
+// Cache the result in module scope (kept alive across warm invocations) so the
+// fetch happens once and every subsequent message reuses it instantly.
+let piCache: { at: number; docIds: string; text: string } | null = null
+const PI_TTL_MS = 10 * 60_000 // 10 min — occasional refresh in case the doc changes
+
 async function pageIndexContext(key: string, docIds: string): Promise<string> {
+  if (piCache && piCache.docIds === docIds && Date.now() - piCache.at < PI_TTL_MS) {
+    return piCache.text
+  }
   const docs = docIds.split(',').map((s) => s.trim()).filter(Boolean)
   const parts: string[] = []
   for (const doc of docs) {
@@ -117,7 +129,9 @@ async function pageIndexContext(key: string, docIds: string): Promise<string> {
       if (md) parts.push(md)
     } catch { /* skip this doc on error */ }
   }
-  return parts.join('\n\n---\n\n').slice(0, 60_000).trim()
+  const text = parts.join('\n\n---\n\n').slice(0, 60_000).trim()
+  piCache = { at: Date.now(), docIds, text }
+  return text
 }
 
 function systemPrompt(mode: string, context: string): string {
