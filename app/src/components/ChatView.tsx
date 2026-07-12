@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
@@ -12,7 +12,21 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { FeedbackModal } from './FeedbackModal'
 import { ShareSheet } from './ShareSheet'
 import type { ShareTarget } from './ShareSheet'
-import { Markdown } from './Markdown'
+// The Markdown renderer pulls in react-markdown + KaTeX (~130KB gzip). We keep it
+// OUT of the login/first-paint bundle by importing it lazily — but to avoid any
+// delay on the AI answer, ChatView warm-prefetches this chunk the moment it mounts
+// (see the effect below), so by the time the user asks anything it's already
+// downloaded and cached. The import promise is memoised, so the mount prefetch and
+// the render share a single network fetch.
+const importMarkdown = () => import('./Markdown').then((m) => ({ default: m.Markdown }))
+const MarkdownLazy = lazy(importMarkdown)
+function Markdown({ text }: { text: string }) {
+  return (
+    <Suspense fallback={<div className="md" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>}>
+      <MarkdownLazy text={text} />
+    </Suspense>
+  )
+}
 import { stripThoughts } from '../lib/format'
 import { isDemo, exitDemo } from '../lib/demo'
 import { PREVIEW_LIMIT, previewRemaining } from '../lib/preview'
@@ -44,6 +58,11 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [previewLeft, setPreviewLeft] = useState(() => (isDemo() ? previewRemaining() : PREVIEW_LIMIT))
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // Warm-prefetch the Markdown/KaTeX chunk as soon as the chat UI mounts (right
+  // after login), well before the first answer streams in — so AI responses
+  // render with formatting instantly, no lazy-load hitch on send.
+  useEffect(() => { importMarkdown() }, [])
 
   useEffect(() => {
     if (!isDemo()) return

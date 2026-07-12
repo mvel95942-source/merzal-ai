@@ -8,7 +8,9 @@ import { Login } from './components/Login'
 import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { Settings } from './components/Settings'
-import { SharedView } from './components/SharedView'
+// Public share route only — code-split so the markdown/KaTeX bundle it pulls in
+// stays off the initial login load.
+const SharedView = lazy(() => import('./components/SharedView').then((m) => ({ default: m.SharedView })))
 import { InstallPrompt } from './components/InstallPrompt'
 // Admin-only surfaces are code-split so students never download xlsx/charts.
 const AdminImport = lazy(() => import('./components/AdminImport').then((m) => ({ default: m.AdminImport })))
@@ -99,7 +101,7 @@ export default function App() {
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title } : c)))
   }
 
-  if (shareToken) return <SharedView token={shareToken} />
+  if (shareToken) return <Suspense fallback={<div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)', background: 'var(--paper-app)' }}>Loading…</div>}><SharedView token={shareToken} /></Suspense>
   // #/admin is open to any admin (Super or Department); feedback + analytics
   // are Super Admin only — both here and server-side via RLS. Lazy surfaces are
   // wrapped in Suspense so their chunk loads on demand.
