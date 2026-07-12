@@ -147,8 +147,13 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
       done = true
       cancelAnimationFrame(raf)
       const saved = await api.addMessage({ chat_id: chatId, role: 'assistant', content: full, mode: m })
+      // Hand off atomically: append the final message here, and the finally block
+      // clears the streaming draft — with no await in between, React batches both
+      // into ONE paint, so the answer never flashes twice. touchChat runs in the
+      // background; awaiting it here was what held the duplicate on screen (the
+      // end-of-stream blink).
       setMessages((prev) => [...prev, saved])
-      await api.touchChat(chatId)
+      api.touchChat(chatId).catch(() => {})
     } catch {
       // aborted or endpoint error — drop the partial draft
     } finally {
@@ -344,19 +349,13 @@ function miniBtn(primary: boolean): React.CSSProperties {
   return { height: 32, padding: '0 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, border: primary ? 'none' : '1px solid var(--line-strong)', background: primary ? 'var(--ink)' : 'var(--surface)', color: primary ? 'var(--paper)' : 'var(--ink)' }
 }
 
-// Streaming reveal — renders PLAIN TEXT while the answer is generating.
-//
-// Previously this ran the full <Markdown> (react-markdown + remark + rehype +
-// KaTeX) on every animation frame. Because setDraft fires ~60x/sec, the entire
-// growing answer was re-parsed from scratch dozens of times a second — that
-// saturated the main thread and made the reveal stutter/glitch and feel slow.
-// Plain text is effectively free to render, so the typewriter stays smooth; the
-// finished message re-renders as fully formatted Markdown the instant the stream
-// completes (see MessageRow's assistant branch). Same final result, no jank.
+// Live streaming reveal: Markdown + LaTeX render AS the text arrives, so bold,
+// lists, and $…$ / $$…$$ math are formatted in place while the answer streams —
+// exactly like ChatGPT. A blinking caret trails the last character.
 function WordReveal({ text }: { text: string }) {
   return (
-    <div className="mz-streaming md" style={{ whiteSpace: 'pre-wrap' }}>
-      {stripThoughts(text)}
+    <div className="mz-streaming">
+      <Markdown text={stripThoughts(text)} />
       <span className="mz-cursor" />
     </div>
   )
