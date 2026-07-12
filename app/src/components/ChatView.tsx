@@ -344,15 +344,19 @@ function miniBtn(primary: boolean): React.CSSProperties {
   return { height: 32, padding: '0 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, border: primary ? 'none' : '1px solid var(--line-strong)', background: primary ? 'var(--ink)' : 'var(--surface)', color: primary ? 'var(--paper)' : 'var(--ink)' }
 }
 
-// Word-by-word blur-to-sharp reveal of the streamed text.
-// Live-rendered streaming: Markdown + LaTeX render AS the text arrives, so bold,
-// lists, and $…$ / $$…$$ math become structured immediately rather than after
-// the whole answer finishes. Incomplete math stays literal until its closing
-// delimiter streams in, then snaps into rendered form.
+// Streaming reveal — renders PLAIN TEXT while the answer is generating.
+//
+// Previously this ran the full <Markdown> (react-markdown + remark + rehype +
+// KaTeX) on every animation frame. Because setDraft fires ~60x/sec, the entire
+// growing answer was re-parsed from scratch dozens of times a second — that
+// saturated the main thread and made the reveal stutter/glitch and feel slow.
+// Plain text is effectively free to render, so the typewriter stays smooth; the
+// finished message re-renders as fully formatted Markdown the instant the stream
+// completes (see MessageRow's assistant branch). Same final result, no jank.
 function WordReveal({ text }: { text: string }) {
   return (
-    <div className="mz-streaming">
-      <Markdown text={stripThoughts(text)} />
+    <div className="mz-streaming md" style={{ whiteSpace: 'pre-wrap' }}>
+      {stripThoughts(text)}
       <span className="mz-cursor" />
     </div>
   )
