@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Fonts are loaded non-render-blocking from index.html (<link rel="preconnect">
+   + async stylesheet) instead of a CSS @import. An @import here forced the
+   browser to download+parse this file, THEN open fresh connections to
+   fonts.googleapis.com and fonts.gstatic.com before first paint — serially
+   chained and render-blocking. The font stacks below fall back to system-ui,
+   so text paints instantly and Inter/JetBrains Mono swap in when ready. */
 
 /* ───────────────── Light theme (default) ───────────────── */
 :root {

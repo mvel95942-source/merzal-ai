@@ -13,6 +13,26 @@
     <meta name="apple-mobile-web-app-title" content="Merzal AI" />
     <meta name="application-name" content="Merzal AI" />
     <meta name="description" content="Your private campus AI assistant." />
+
+    <!-- Fonts, loaded off the critical render path. preconnect warms the
+         gstatic/googleapis TLS handshakes during HTML parse; the stylesheet
+         loads as media=print then flips to all on load, so first paint never
+         waits on fonts (system-ui shows immediately, Inter swaps in). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      />
+    </noscript>
+
     <title>Merzal AI · Campus AI</title>
   </head>
   <body>
