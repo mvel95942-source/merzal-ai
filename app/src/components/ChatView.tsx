@@ -111,9 +111,12 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     setDraft('')
     const ctrl = new AbortController()
     abortRef.current = ctrl
-    // Typewriter reveal: the model emits multi-character SSE chunks; we reveal
-    // them one character at a time per animation frame, only speeding up when we
-    // fall far behind so the caret keeps pace with a fast stream (no chunky jumps).
+    // Typewriter reveal: the model (or the gateway) can emit big multi-character
+    // SSE chunks — even a whole paragraph at once. We reveal a few characters per
+    // animation frame so the answer always TYPES OUT character by character and
+    // never spits a paragraph. The per-frame step is capped (max 4 chars ≈ 240
+    // chars/sec at 60fps); a mild catch-up keeps the caret near the tail on fast
+    // streams without ever dumping a large block in a single frame.
     let started = false
     let target = ''   // full text received so far
     let shown = 0     // characters revealed on screen
@@ -122,7 +125,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     const tick = () => {
       if (shown < target.length) {
         const remaining = target.length - shown
-        shown += Math.max(1, Math.round(remaining / 6))
+        shown += Math.max(1, Math.min(4, Math.ceil(remaining / 10)))
         setDraft(target.slice(0, shown))
       }
       raf = (!done || shown < target.length) ? requestAnimationFrame(tick) : 0
