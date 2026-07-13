@@ -173,10 +173,16 @@ Deno.serve(async (req) => {
   // Backend decides which provider + model serves this mode.
   let { provider, model } = routeForMode(mode)
   // Image requests can't run on a text-only model (e.g. DeepSeek V4 Flash), so
-  // route them to Gemini vision when GEMINI_API_KEY is available.
-  if (hasImageParts(messages) && Deno.env.get('GEMINI_API_KEY')) {
-    provider = 'gemini'
-    model = Deno.env.get('VISION_MODEL') || 'gemini-2.0-flash'
+  // route them to a vision model. Default: DeepSeek V4 Pro on the AICredits
+  // gateway (override with VISION_PROVIDER / VISION_MODEL). If that provider
+  // isn't configured but Gemini is, fall back to Gemini vision.
+  if (hasImageParts(messages)) {
+    provider = (Deno.env.get('VISION_PROVIDER') as ProviderId) || 'aicredits'
+    model = Deno.env.get('VISION_MODEL') || 'deepseek/deepseek-v4-pro'
+    if ('error' in resolveProvider(provider) && Deno.env.get('GEMINI_API_KEY')) {
+      provider = 'gemini'
+      model = 'gemini-2.0-flash'
+    }
   }
   const up = resolveProvider(provider)
   if ('error' in up) return json({ error: up.error }, 501) // 501 → client uses stub
