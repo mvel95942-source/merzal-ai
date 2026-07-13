@@ -42,9 +42,19 @@ async function streamPreview(req: LLMRequest, onToken: (t: string) => void): Pro
 // streams directly from that gateway for every mode. The key comes from env —
 // it is NEVER hardcoded. For the HOSTED site, leave these unset and route
 // through the `chat` edge function instead, so the key stays server-side.
-const AI_BASE = (import.meta.env.VITE_AI_BASE_URL as string | undefined)?.replace(/\/$/, '')
-const AI_KEY = import.meta.env.VITE_AI_API_KEY as string | undefined
+// SECURITY: the AICredits key is a live secret. Reference it ONLY inside a
+// statically-`false` dev branch so Vite's dead-code elimination strips the key
+// string out of every production bundle — even if VITE_AI_API_KEY is defined at
+// build time. In prod the browser never holds this key; chat routes through the
+// `chat` edge function, which holds provider keys as Supabase secrets.
+const AI_BASE = import.meta.env.DEV ? (import.meta.env.VITE_AI_BASE_URL as string | undefined)?.replace(/\/$/, '') : undefined
+const AI_KEY = import.meta.env.DEV ? (import.meta.env.VITE_AI_API_KEY as string | undefined) : undefined
 const AI_MODELS = ((import.meta.env.VITE_AI_MODEL as string) || 'deepseek/deepseek-v4-flash')
+  .split(',').map((s) => s.trim()).filter(Boolean)
+// Vision model on the same OpenAI-compatible gateway. DeepSeek V4 Pro is
+// multimodal, so uploaded images/photos are folded in as image_url parts and
+// the model actually sees them (override with VITE_AI_VISION_MODEL).
+const AI_VISION_MODELS = ((import.meta.env.VITE_AI_VISION_MODEL as string) || 'deepseek/deepseek-v4-pro')
   .split(',').map((s) => s.trim()).filter(Boolean)
 const hasAiGateway = !!(AI_BASE && AI_KEY)
 
@@ -55,7 +65,9 @@ const hasAiGateway = !!(AI_BASE && AI_KEY)
 
 // Preview mode: call the Gemini/Gemma OpenAI-compatible endpoint directly from
 // the browser (key in VITE_GEMINI_API_KEY). Dev-only.
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
+// SECURITY: same as AI_KEY — dev-only reference so the Gemini key is never
+// inlined into a production bundle. Prod vision/text both route via the edge fn.
+const GEMINI_KEY = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY as string | undefined) : undefined
 // Comma-separated fallback list. On 429/500/upstream error we try the next.
 const GEMINI_MODELS = ((import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.5-flash,gemini-2.0-flash')
   .split(',').map((s) => s.trim()).filter(Boolean)
@@ -122,7 +134,7 @@ export function foldAttachments(
 // DeepSeek V4 Flash is a reasoning model: its <thought> / reasoning_content is
 // kept out of the visible stream by streamOpenAISSE (which only reads
 // delta.content). Models are tried in order; 429/5xx falls through to the next.
-async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void, models: string[] = AI_MODELS, vision = false): Promise<string> {
   const base =
     req.mode === 'campus'
       ? 'You are a private campus assistant. Be concise, helpful, and accurate.'
@@ -133,15 +145,16 @@ async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void): P
     ' When the user attaches text files, read them and reference their content directly.' +
     (req.context ? `\n\n${req.context}` : '')
   let lastStatus = 0
-  for (const model of AI_MODELS) {
+  for (const model of models) {
     if (req.signal?.aborted) throw new Error('aborted')
     let res: Response
     try {
       res = await fetch(`${AI_BASE}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI_KEY}` },
-        // vision=false: DeepSeek is text-only, so images fold to a text note.
-        body: JSON.stringify({ model, stream: true, messages: buildMessages(req, system, false) }),
+        // vision=true (DeepSeek V4 Pro): images fold in as image_url parts so the
+        // model sees them. vision=false (V4 Flash): images fold to a text note.
+        body: JSON.stringify({ model, stream: true, messages: buildMessages(req, system, vision) }),
         signal: req.signal,
       })
     } catch { lastStatus = 0; continue }
@@ -264,16 +277,19 @@ export async function streamChat(req: LLMRequest, onToken: (t: string) => void):
   const hasImages = (req.attachments ?? []).some((a) => a.kind === 'image' && a.dataUrl)
 
   // Engine selection (local dev with browser keys in .env.local):
-  //   • images → Gemini vision (DeepSeek V4 Flash is text-only)
+  //   • images → DeepSeek V4 Pro vision on the AICredits gateway (falls back to
+  //              Gemini vision if only a Gemini key is present)
   //   • text   → AICredits / DeepSeek V4 Flash (Campus included — PageIndex
   //              only retrieves grounding context, injected via req.context
   //              by lib/knowledge.ts; DeepSeek always writes the answer)
   //   • else   → Gemini as a legacy fallback
   const textEngine: ((r: LLMRequest, o: (t: string) => void) => Promise<string>) | null =
     hasAiGateway ? streamAiGateway : GEMINI_KEY ? streamGeminiDirect : null
-  let engine: ((r: LLMRequest, o: (t: string) => void) => Promise<string>) | null = null
-  if (hasImages && GEMINI_KEY) engine = (r, o) => streamGeminiDirect(r, o, GEMINI_VISION_MODELS)
-  else engine = textEngine
+  let engine: ((r: LLMRequest, o: (t: string) => void) => Promise<string>) | null = textEngine
+  if (hasImages) {
+    if (hasAiGateway) engine = (r, o) => streamAiGateway(r, o, AI_VISION_MODELS, true)
+    else if (GEMINI_KEY) engine = (r, o) => streamGeminiDirect(r, o, GEMINI_VISION_MODELS)
+  }
 
   if (engine) {
     // Anonymous preview keeps its per-device daily cap; signed-in users uncapped.

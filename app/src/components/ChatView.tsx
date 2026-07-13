@@ -122,7 +122,12 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     const tick = () => {
       if (shown < target.length) {
         const remaining = target.length - shown
-        shown += Math.max(1, Math.round(remaining / 6))
+        // Reveal one character at a time for a natural typewriter cadence
+        // (Claude / ChatGPT feel). Only nudge faster when a burst of tokens
+        // leaves us far behind, and cap the step low so it never jumps in
+        // visible chunks — the chunky proportional catch-up was the jank.
+        const step = Math.min(remaining, Math.max(1, Math.min(6, Math.ceil(remaining / 40))))
+        shown += step
         setDraft(target.slice(0, shown))
       }
       raf = (!done || shown < target.length) ? requestAnimationFrame(tick) : 0
@@ -144,11 +149,28 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           target += tok
         },
       )
+      // Stream finished. Reveal the EXACT final text, then let the typewriter
+      // drain to the end before swapping — no premature cut, no end-of-answer
+      // snap. (Cancelling the animation right here was the visible glitch.)
+      target = full
+      if (!started && full) { started = true; setThinking(false); setStreaming(true); raf = requestAnimationFrame(tick) }
+      await new Promise<void>((resolve) => {
+        const check = () => (shown >= target.length ? resolve() : requestAnimationFrame(check))
+        check()
+      })
       done = true
       cancelAnimationFrame(raf)
-      const saved = await api.addMessage({ chat_id: chatId, role: 'assistant', content: full, mode: m })
-      setMessages((prev) => [...prev, saved])
-      await api.touchChat(chatId)
+      // Swap the streamed draft for the saved bubble in ONE render: append the
+      // message and clear the streaming state together (no await between them),
+      // so the answer never flickers or briefly appears twice. Because the
+      // typewriter already revealed the full text, the swap is seamless.
+      if (full) {
+        const saved = await api.addMessage({ chat_id: chatId, role: 'assistant', content: full, mode: m })
+        setMessages((prev) => [...prev, saved])
+        api.touchChat(chatId).catch(() => {})
+      }
+      setStreaming(false)
+      setDraft('')
     } catch {
       // aborted or endpoint error — drop the partial draft
     } finally {
