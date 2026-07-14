@@ -19,10 +19,10 @@ export function FeedbackModal({ type, onClose, onSubmit }: {
   }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: '#1d1a1688', display: 'grid', placeItems: 'center', zIndex: 50, animation: 'mz-fadein .15s both' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(440px, 92vw)', background: 'var(--paper-panel, #f6f3ec)', borderRadius: 18, padding: 22, boxShadow: '0 20px 60px #0003' }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>{positive ? 'What worked well?' : 'What went wrong?'}</h3>
-        <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--muted, #7a7166)' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: '#00000066', display: 'grid', placeItems: 'center', zIndex: 50, animation: 'mz-fadein .15s both' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(440px, 92vw)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 22, boxShadow: '0 20px 60px #0006' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 18, color: 'var(--ink)' }}>{positive ? 'What worked well?' : 'What went wrong?'}</h3>
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--muted)' }}>
           {positive ? 'Tell us what you liked — it helps us improve.' : 'Your notes help us fix and improve responses.'}
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 14 }}>
@@ -32,7 +32,7 @@ export function FeedbackModal({ type, onClose, onSubmit }: {
               <button
                 key={p}
                 onClick={() => setComment((c) => (on ? c.replace(new RegExp(`\\s*${p}[.;]?`), '').trim() : (c ? c + '; ' : '') + p))}
-                style={{ height: 30, padding: '0 11px', borderRadius: 999, fontSize: 12.5, border: '1px solid var(--line-strong, #ddd4c5)', background: on ? 'var(--accent, #bf5e36)' : '#fff', color: on ? '#fff' : 'var(--ink, #1d1a16)', cursor: 'pointer' }}
+                style={{ height: 30, padding: '0 11px', borderRadius: 999, fontSize: 12.5, border: '1px solid var(--line-strong)', background: on ? 'var(--accent)' : 'var(--surface-soft)', color: on ? '#fff' : 'var(--ink)', cursor: 'pointer' }}
               >
                 {p}
               </button>
@@ -45,11 +45,11 @@ export function FeedbackModal({ type, onClose, onSubmit }: {
           onChange={(e) => setComment(e.target.value)}
           placeholder={positive ? 'Anything else? (optional)' : 'Describe the issue…'}
           rows={positive ? 3 : 5}
-          style={{ width: '100%', border: '1px solid var(--line-strong, #ddd4c5)', borderRadius: 12, padding: 12, fontSize: 14, resize: 'vertical', outline: 'none', boxSizing: 'border-box', background: '#fff', color: 'var(--ink, #1d1a16)' }}
+          style={{ width: '100%', border: '1px solid var(--line-strong)', borderRadius: 12, padding: 12, fontSize: 14, resize: 'vertical', outline: 'none', boxSizing: 'border-box', background: 'var(--surface-soft)', color: 'var(--ink)' }}
         />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9, marginTop: 16 }}>
-          <button onClick={onClose} style={{ height: 40, padding: '0 16px', borderRadius: 11, border: '1px solid var(--line-strong, #ddd4c5)', background: '#fff', fontSize: 14, fontWeight: 600 }}>Cancel</button>
-          <button onClick={submit} disabled={busy} style={{ height: 40, padding: '0 18px', borderRadius: 11, border: 'none', background: 'var(--accent, #bf5e36)', color: '#fff', fontSize: 14, fontWeight: 600 }}>
+          <button onClick={onClose} style={{ height: 40, padding: '0 16px', borderRadius: 11, border: '1px solid var(--line-strong)', background: 'var(--surface-soft)', color: 'var(--ink)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={submit} disabled={busy} style={{ height: 40, padding: '0 18px', borderRadius: 11, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             {busy ? 'Sending…' : 'Submit feedback'}
           </button>
         </div>
