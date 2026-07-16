@@ -6,6 +6,7 @@ import { supabase, hasSupabase } from './supabase'
 import { isDemo } from './demo'
 import { deviceId, previewRemaining, setPreviewRemaining } from './preview'
 import { stripThoughts } from './format'
+import { FILE_CONTRACT } from './fileprompt'
 import type { ChatMode, Message } from './types'
 
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -282,7 +283,12 @@ async function streamOpenAISSE(res: Response, onToken: (t: string) => void): Pro
   return finish()
 }
 
-export async function streamChat(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
+export async function streamChat(req0: LLMRequest, onToken: (t: string) => void): Promise<string> {
+  // Teach the model to emit <merzal-file> blocks. Injected HERE, once: every
+  // transport below folds req.context into its system message, so this single
+  // point covers the edge function, the preview gateway and the direct paths
+  // without the contract drifting between copies.
+  const req: LLMRequest = { ...req0, context: [req0.context, FILE_CONTRACT].filter(Boolean).join('\n\n') }
   const hasImages = (req.attachments ?? []).some((a) => a.kind === 'image' && a.dataUrl)
 
   // Engine selection (local dev with browser keys in .env.local):

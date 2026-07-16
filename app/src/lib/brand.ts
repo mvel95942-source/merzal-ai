@@ -132,17 +132,20 @@ export function applyBrand(override: Partial<Brand>) {
 // Merge build-time env vars + an optional runtime JSON, then sync the theme.
 // Awaited in main.tsx before the app renders so the first paint is branded.
 export async function initBrand(): Promise<void> {
-  const env = import.meta.env
+  // SECURITY: read each brand var by STATIC property access. Never bind the whole
+  // `import.meta.env` object (e.g. `const env = import.meta.env`) — the bundler
+  // inlines the entire env object as a literal when it sees a whole-object
+  // reference, which would leak every VITE_ secret into the browser bundle.
   const envOverride: Partial<Brand> = {}
-  if (env.VITE_BRAND_NAME) envOverride.name = String(env.VITE_BRAND_NAME)
-  if (env.VITE_BRAND_SHORT) envOverride.shortName = String(env.VITE_BRAND_SHORT)
-  if (env.VITE_BRAND_INSTITUTION) envOverride.institution = String(env.VITE_BRAND_INSTITUTION)
-  if (env.VITE_BRAND_LOGO_LETTER) envOverride.logoLetter = String(env.VITE_BRAND_LOGO_LETTER)
-  if (env.VITE_BRAND_ACCENT) envOverride.accent = String(env.VITE_BRAND_ACCENT)
-  if (env.VITE_AUDIENCE) envOverride.audience = String(env.VITE_AUDIENCE) as Audience
+  if (import.meta.env.VITE_BRAND_NAME) envOverride.name = String(import.meta.env.VITE_BRAND_NAME)
+  if (import.meta.env.VITE_BRAND_SHORT) envOverride.shortName = String(import.meta.env.VITE_BRAND_SHORT)
+  if (import.meta.env.VITE_BRAND_INSTITUTION) envOverride.institution = String(import.meta.env.VITE_BRAND_INSTITUTION)
+  if (import.meta.env.VITE_BRAND_LOGO_LETTER) envOverride.logoLetter = String(import.meta.env.VITE_BRAND_LOGO_LETTER)
+  if (import.meta.env.VITE_BRAND_ACCENT) envOverride.accent = String(import.meta.env.VITE_BRAND_ACCENT)
+  if (import.meta.env.VITE_AUDIENCE) envOverride.audience = String(import.meta.env.VITE_AUDIENCE) as Audience
   applyBrand(envOverride)
 
-  const url = env.VITE_BRAND_JSON_URL as string | undefined
+  const url = import.meta.env.VITE_BRAND_JSON_URL as string | undefined
   if (url) {
     try {
       const res = await fetch(url)

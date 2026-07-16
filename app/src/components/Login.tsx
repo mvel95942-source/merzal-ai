@@ -5,6 +5,59 @@ import { hasSupabase } from '../lib/supabase'
 import { enterDemo } from '../lib/demo'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { Logo } from './Logo'
+import { Eye, EyeOff } from './Icons'
+
+/**
+ * Password input with a show/hide toggle.
+ *
+ * Students type these on phones, where a mistyped character is invisible and
+ * the only feedback is a failed sign-in — or, when creating a password, a
+ * "passwords do not match" they cannot diagnose. Revealing is opt-in and
+ * per-field, and defaults to hidden so nothing is exposed over a shoulder
+ * unless asked for.
+ */
+function PasswordField({ value, onChange, placeholder, autoComplete, autoFocus, onEnter }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  autoComplete: string
+  autoFocus?: boolean
+  onEnter?: () => void
+}) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={shown ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) onEnter() }}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        // Room for the toggle so a long password never runs under it.
+        style={{ ...field, paddingRight: 46 }}
+      />
+      <button
+        type="button"
+        onClick={() => setShown((s) => !s)}
+        // aria-pressed conveys the state; the label says what the click DOES.
+        aria-label={shown ? 'Hide password' : 'Show password'}
+        aria-pressed={shown}
+        title={shown ? 'Hide password' : 'Show password'}
+        // tabIndex -1: keep Tab going straight to the next field, not the eye.
+        tabIndex={-1}
+        style={{
+          position: 'absolute', right: 6, top: 0, height: 48, width: 38,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer',
+        }}
+      >
+        {shown ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
+  )
+}
 
 export function Login() {
   const isMobile = useIsMobile()
@@ -82,9 +135,9 @@ export function Login() {
       {stage === 'create' && (
         <>
           <label className="mono" style={lbl}>New password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters, letters + a number" autoComplete="new-password" autoFocus={af} style={field} />
+          <PasswordField value={password} onChange={setPassword} placeholder="at least 8 characters, letters + a number" autoComplete="new-password" autoFocus={af} />
           <label className="mono" style={{ ...lbl, marginTop: 14 }}>Confirm password</label>
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createPassword()} placeholder="re-enter to confirm" autoComplete="new-password" style={field} />
+          <PasswordField value={confirm} onChange={setConfirm} onEnter={createPassword} placeholder="re-enter to confirm" autoComplete="new-password" />
           <button onClick={createPassword} disabled={busy} style={{ ...primaryBtn, marginTop: 18 }}>{busy ? 'Creating…' : 'Create password & sign in'} <span className="mono">→</span></button>
           <div style={{ marginTop: 12 }}><button onClick={back} style={linkBtn}>← Use a different enrollment</button></div>
         </>
@@ -92,7 +145,7 @@ export function Login() {
       {stage === 'signin' && (
         <>
           <label className="mono" style={lbl}>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && signIn()} placeholder="••••••••" autoComplete="current-password" autoFocus={af} style={field} />
+          <PasswordField value={password} onChange={setPassword} onEnter={signIn} placeholder="••••••••" autoComplete="current-password" autoFocus={af} />
           <button onClick={signIn} disabled={busy} style={{ ...primaryBtn, marginTop: 18 }}>{busy ? 'Signing in…' : 'Sign in'} <span className="mono">→</span></button>
           <div style={{ marginTop: 12 }}><button onClick={back} style={linkBtn}>← Use a different enrollment</button></div>
         </>

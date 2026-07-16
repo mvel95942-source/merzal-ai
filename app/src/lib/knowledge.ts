@@ -14,7 +14,11 @@ const CAMPUS_KNOWLEDGE_BUDGET = 6_000 // chars; career-guide fallback stays smal
 // ── PageIndex retrieval (Campus grounding) ───────────────────────────────
 // Key + doc id(s) from env — never hardcoded. For the hosted site prefer the
 // edge function (PAGEINDEX_* secrets); locally these VITE_ vars power it.
-const PI_KEY = import.meta.env.VITE_PAGEINDEX_API_KEY as string | undefined
+// SECURITY: the PageIndex key is a live secret. Reference it ONLY in a
+// statically-`false` dev branch so it is dead-code-eliminated from production
+// bundles. In prod, campus grounding runs server-side in the `chat` edge
+// function (PAGEINDEX_* Supabase secrets); the browser never holds this key.
+const PI_KEY = import.meta.env.DEV ? (import.meta.env.VITE_PAGEINDEX_API_KEY as string | undefined) : undefined
 const PI_BASE = ((import.meta.env.VITE_PAGEINDEX_BASE_URL as string) || 'https://api.pageindex.ai').replace(/\/$/, '')
 const PI_DOCS = ((import.meta.env.VITE_PAGEINDEX_DOC_ID as string) || '')
   .split(',').map((s) => s.trim()).filter(Boolean)

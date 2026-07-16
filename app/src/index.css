@@ -266,3 +266,16 @@ button { cursor: pointer; background: none; }
 }
 .mz-send-btn:disabled { opacity: .25; }
 .mz-send-btn:active { transform: scale(.94); }
+
+/* AI-generated document: an inline download link, not a boxed card, so it sits
+   in the flow of the reply (intro → link → what's inside). */
+.mz-filelink {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: none; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: 14.5px; font-weight: 600;
+  color: var(--accent); text-align: left;
+  transition: opacity .12s;
+}
+.mz-filelink:hover { opacity: .75; }
+.mz-filelink:disabled { opacity: .5; cursor: default; }
+.mz-filelink:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
