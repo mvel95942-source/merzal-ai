@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { brand } from '../lib/brand'
 import { api } from '../lib/api'
@@ -8,6 +8,9 @@ import { SESSION_TURN_LIMIT, extractMemories, memoryContext } from '../lib/memor
 import { ACCEPT_DOCS, ACCEPT_IMAGES, readFiles } from '../lib/attachments'
 import type { PendingAttachment } from '../lib/attachments'
 import type { ChatMode, ConnState, Message } from '../lib/types'
+import { versionsOf } from '../lib/types'
+import { parseFiles, stripStreamingFiles } from '../lib/filegen'
+import { FileCard } from './FileCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { FeedbackModal } from './FeedbackModal'
 import { ShareSheet } from './ShareSheet'
@@ -16,7 +19,7 @@ import { Markdown } from './Markdown'
 import { stripThoughts } from '../lib/format'
 import { isDemo, exitDemo } from '../lib/demo'
 import { PREVIEW_LIMIT, previewRemaining } from '../lib/preview'
-import { Camera, Check, FileDoc, Image, Plus, ThumbDown, ThumbUp, Warning } from './Icons'
+import { Camera, Check, FileDoc, Image, Plus, Refresh, ThumbDown, ThumbUp, Warning } from './Icons'
 
 interface Props {
   chatId: string | null
@@ -38,6 +41,8 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [streaming, setStreaming] = useState(false)
   const [thinking, setThinking] = useState(false)
   const [draft, setDraft] = useState('') // streamed-but-not-saved assistant text
+  // Reply currently being regenerated — hidden while its replacement streams in.
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
   const [feedbackFor, setFeedbackFor] = useState<{ m: Message; type: 'up' | 'down' } | null>(null)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
@@ -105,9 +110,13 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
 
   // Stream an assistant reply grounded in memory + retrieved knowledge, then
   // persist it. `history` is the full turn list ending with the user message.
-  async function generate(history: Message[], m: ChatMode, atts: PendingAttachment[] = []) {
+  //
+  // `replace` = regenerate: instead of appending a new bubble, the finished text
+  // becomes a new VERSION of that existing reply (old text kept, arrows appear).
+  async function generate(history: Message[], m: ChatMode, atts: PendingAttachment[] = [], replace?: Message) {
     if (!chatId) return
     setThinking(true)
+    setRegeneratingId(replace?.id ?? null)
     setDraft('')
     const ctrl = new AbortController()
     abortRef.current = ctrl
@@ -164,7 +173,21 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
       // message and clear the streaming state together (no await between them),
       // so the answer never flickers or briefly appears twice. Because the
       // typewriter already revealed the full text, the swap is seamless.
-      if (full) {
+      if (full && replace) {
+        // New version of an existing reply. Append to the variant list and make
+        // it active; `content` mirrors it so every other reader (export, share,
+        // model history) is unaffected.
+        const prevVersions = versionsOf(replace).list
+        const variants = [...prevVersions, full]
+        const index = variants.length - 1
+        setMessages((prev) => prev.map((x) => (x.id === replace.id ? { ...x, content: full, variants, variant_index: index, reaction: null } : x)))
+        // The old thumbs-up/down judged the PREVIOUS text, so it can't carry to
+        // a freshly generated one. (The rating itself is already preserved in
+        // the feedback table alongside the answer it was given for.)
+        if (replace.reaction) api.reactMessage(replace.id, null).catch(() => {})
+        api.saveVariants(replace.id, variants, index).catch(() => {})
+        api.touchChat(chatId).catch(() => {})
+      } else if (full) {
         const saved = await api.addMessage({ chat_id: chatId, role: 'assistant', content: full, mode: m })
         setMessages((prev) => [...prev, saved])
         api.touchChat(chatId).catch(() => {})
@@ -172,15 +195,36 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
       setStreaming(false)
       setDraft('')
     } catch {
-      // aborted or endpoint error — drop the partial draft
+      // aborted or endpoint error — drop the partial draft. On a regenerate the
+      // previous answer is untouched, so it simply reappears.
     } finally {
       done = true
       cancelAnimationFrame(raf)
       setThinking(false)
       setStreaming(false)
       setDraft('')
+      setRegeneratingId(null)
       abortRef.current = null
     }
+  }
+
+  // Regenerate an assistant reply: re-run the model on the same history and
+  // keep the old answer as a browsable version. Offered on the LAST reply only
+  // — regenerating an earlier one would invalidate everything said after it.
+  async function regenerateAnswer(m: Message) {
+    if (!chatId || streaming || thinking) return
+    const idx = messages.findIndex((x) => x.id === m.id)
+    if (idx === -1) return
+    await generate(messages.slice(0, idx), m.mode ?? mode, [], m)
+  }
+
+  // Browse to another version. `content` follows the active variant so the rest
+  // of the app keeps reading `content` and never learns variants exist.
+  async function switchVersion(m: Message, index: number) {
+    const { list } = versionsOf(m)
+    if (index < 0 || index >= list.length || streaming || thinking) return
+    setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, content: list[index], variants: list, variant_index: index } : x)))
+    await api.saveVariants(m.id, list, index).catch(() => {})
   }
 
   // ChatGPT-style edit: replace the user message, drop everything after it
@@ -235,16 +279,25 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           <Hero />
         ) : (
           <div style={{ maxWidth: 740, margin: '0 auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 22 }}>
-            {messages.map((m) => (
-              <MessageRow
-                key={m.id}
-                m={m}
-                busy={streaming || thinking}
-                onReact={(r) => reactTo(m, r)}
-                onFeedback={(type) => setFeedbackFor({ m, type })}
-                onShare={() => setShareItem({ title: 'Shared from Merzal AI', text: m.content })}
-                onEditSubmit={(text) => regenerate(m, text)}
-              />
+            {messages.map((m, i) => (
+              // The reply being regenerated is hidden: its replacement streams
+              // in below, exactly where the old bubble sat.
+              m.id === regeneratingId ? null : (
+                <MessageRow
+                  key={m.id}
+                  m={m}
+                  busy={streaming || thinking}
+                  // Regenerate is offered on the last reply only — redoing an
+                  // earlier one would invalidate every turn after it.
+                  canRegenerate={m.role === 'assistant' && i === messages.length - 1}
+                  onReact={(r) => reactTo(m, r)}
+                  onFeedback={(type) => setFeedbackFor({ m, type })}
+                  onShare={() => setShareItem({ title: 'Shared from Merzal AI', text: m.content })}
+                  onEditSubmit={(text) => regenerate(m, text)}
+                  onRegenerate={() => regenerateAnswer(m)}
+                  onVersion={(idx) => switchVersion(m, idx)}
+                />
+              )
             ))}
             {thinking && <AssistantWrap><ThinkingIndicator /></AssistantWrap>}
             {streaming && <AssistantWrap><WordReveal text={draft} /></AssistantWrap>}
@@ -295,16 +348,23 @@ function AssistantWrap({ children }: { children: React.ReactNode }) {
   )
 }
 
-function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
+function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEditSubmit, onRegenerate, onVersion }: {
   m: Message
   busy: boolean
+  canRegenerate: boolean
   onReact: (r: 'up' | 'down') => void
   onFeedback: (type: 'up' | 'down') => void
   onShare: () => void
   onEditSubmit: (text: string) => void
+  onRegenerate: () => void
+  onVersion: (index: number) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.content)
+  // Split the reply into prose + any documents the model wrote. Recomputed only
+  // when the text changes — parsing on every render would re-run on each hover.
+  const { files, text } = useMemo(() => parseFiles(stripThoughts(m.content), m.id), [m.content, m.id])
+  const { index, count } = versionsOf(m)
 
   // ── User message: right-aligned ChatGPT-style bubble ─────────────
   if (m.role === 'user') {
@@ -344,12 +404,27 @@ function MessageRow({ m, busy, onReact, onFeedback, onShare, onEditSubmit }: {
   // ── Assistant message: full-width, no branding, action row ────────
   return (
     <div className="msg" style={{ minWidth: 0 }}>
-      <Markdown text={stripThoughts(m.content)} />
-      <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 8 }}>
-        <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} title="Good response" onClick={() => (m.reaction === 'up' ? onReact('up') : onFeedback('up'))}><ThumbUp size={15} /></button>
-        <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}><ThumbDown size={15} /></button>
-        <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
-        <button className="act-btn" onClick={onShare}>Share</button>
+      {text && <Markdown text={text} />}
+      {files.map((f) => <FileCard key={f.id} spec={f} />)}
+      {/* The version arrows stay visible (not hover-only): they're state, not
+          an action — hiding "2/2" would leave no sign a v1 exists. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 8 }}>
+        {count > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginRight: 4 }}>
+            <button className="act-btn" style={{ padding: '0 4px' }} disabled={busy || index === 0} title="Previous response" aria-label="Previous response" onClick={() => onVersion(index - 1)}>‹</button>
+            <span style={{ fontSize: 11.5, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', minWidth: 26, textAlign: 'center' }}>{index + 1}/{count}</span>
+            <button className="act-btn" style={{ padding: '0 4px' }} disabled={busy || index === count - 1} title="Next response" aria-label="Next response" onClick={() => onVersion(index + 1)}>›</button>
+          </div>
+        )}
+        <div className="msg-actions" style={{ display: 'flex', gap: 2 }}>
+          <button className={'act-btn' + (m.reaction === 'up' ? ' on' : '')} title="Good response" onClick={() => (m.reaction === 'up' ? onReact('up') : onFeedback('up'))}><ThumbUp size={15} /></button>
+          <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}><ThumbDown size={15} /></button>
+          <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
+          <button className="act-btn" onClick={onShare}>Share</button>
+          {canRegenerate && (
+            <button className="act-btn" disabled={busy} title="Regenerate response" aria-label="Regenerate response" onClick={onRegenerate}><Refresh size={14} /></button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -372,9 +447,18 @@ function miniBtn(primary: boolean): React.CSSProperties {
 // the whole answer finishes. Incomplete math stays literal until its closing
 // delimiter streams in, then snaps into rendered form.
 function WordReveal({ text }: { text: string }) {
+  // A document arrives as raw <merzal-file> markup. Hide it and show a status
+  // chip instead — the real download card renders once the reply is saved and
+  // parsed. Without this the user watches markup type itself out.
+  const { text: shown, writing: writingDoc } = stripStreamingFiles(stripThoughts(text))
   return (
     <div className="mz-streaming">
-      <Markdown text={stripThoughts(text)} />
+      <Markdown text={shown} />
+      {writingDoc && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '7px 12px', borderRadius: 999, background: 'var(--surface-soft)', color: 'var(--muted)', fontSize: 12.5 }}>
+          <FileDoc size={15} /> Writing your document…
+        </div>
+      )}
       <span className="mz-cursor" />
     </div>
   )

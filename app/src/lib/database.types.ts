@@ -43,9 +43,9 @@ export type Database = {
         Relationships: []
       }
       messages: {
-        Row: { chat_id: string; content: string; created_at: string; id: string; mode: string | null; reaction: string | null; role: string; user_id: string }
-        Insert: { chat_id: string; content: string; created_at?: string; id?: string; mode?: string | null; reaction?: string | null; role: string; user_id: string }
-        Update: { chat_id?: string; content?: string; created_at?: string; id?: string; mode?: string | null; reaction?: string | null; role?: string; user_id?: string }
+        Row: { chat_id: string; content: string; created_at: string; id: string; mode: string | null; reaction: string | null; role: string; user_id: string; variants: Json | null; variant_index: number | null }
+        Insert: { chat_id: string; content: string; created_at?: string; id?: string; mode?: string | null; reaction?: string | null; role: string; user_id: string; variants?: Json | null; variant_index?: number | null }
+        Update: { chat_id?: string; content?: string; created_at?: string; id?: string; mode?: string | null; reaction?: string | null; role?: string; user_id?: string; variants?: Json | null; variant_index?: number | null }
         Relationships: []
       }
       shared_chats: {

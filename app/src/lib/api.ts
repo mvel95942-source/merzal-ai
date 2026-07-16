@@ -13,6 +13,12 @@ async function uid(): Promise<string> {
 
 const randomToken = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').slice(0, 14) : Math.random().toString(36).slice(2, 16))
 
+// Postgres 42703 = undefined_column. Lets a write target a column that a
+// pending migration hasn't added yet and fall back instead of throwing.
+function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === '42703' || /column .* does not exist/i.test(error?.message ?? '')
+}
+
 export interface SharedConversation { title: string; messages: Message[] }
 
 // Students sign in with their roll number + password. Supabase Auth is
@@ -380,6 +386,28 @@ const realApi = {
 
   async editMessage(messageId: string, content: string) {
     await supabase.from('messages').update({ content }).eq('id', messageId)
+  },
+
+  // ── ANSWER VERSIONS ───────────────────────────────────────────────
+  // `variants` holds every generated version of an assistant reply and
+  // `content` mirrors the active one, so exports / shared chats / the model's
+  // own history keep reading `content` and never learn variants exist.
+  //
+  // The variants columns are added by a migration the operator runs by hand
+  // (see supabase/migrations/). Until it runs, PostgREST rejects the write with
+  // 42703 "column does not exist" — so we retry with content alone. Effect:
+  // regenerate still works and simply keeps no history, instead of the whole
+  // feature erroring out on an un-migrated database.
+  async saveVariants(messageId: string, variants: string[], index: number): Promise<{ persisted: boolean }> {
+    const content = variants[index]
+    const { error } = await supabase
+      .from('messages')
+      .update({ content, variants, variant_index: index })
+      .eq('id', messageId)
+    if (!error) return { persisted: true }
+    if (!isMissingColumn(error)) throw error
+    await supabase.from('messages').update({ content }).eq('id', messageId)
+    return { persisted: false }
   },
 
   async reactMessage(messageId: string, reaction: Reaction) {

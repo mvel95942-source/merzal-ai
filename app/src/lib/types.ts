@@ -60,6 +60,24 @@ export interface Message {
   mode?: ChatMode | null
   reaction?: Reaction
   created_at: string
+  /**
+   * Every generated version of an assistant answer, oldest first, INCLUDING the
+   * one currently in `content`. Null/absent on user messages and on any reply
+   * that was never regenerated — those show no version arrows.
+   * `content` is always kept in sync with `variants[variant_index]` so every
+   * other read path (exports, shared chats, the model's own history) keeps
+   * working without knowing variants exist.
+   */
+  variants?: string[] | null
+  variant_index?: number | null
+}
+
+/** Version-arrow state for an assistant reply. Single source of truth for the UI. */
+export function versionsOf(m: Message): { list: string[]; index: number; count: number } {
+  const list = m.variants?.length ? m.variants : [m.content]
+  const raw = m.variant_index ?? list.length - 1
+  const index = Math.min(Math.max(raw, 0), list.length - 1)
+  return { list, index, count: list.length }
 }
 
 export interface MemoryItem {

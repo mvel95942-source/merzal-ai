@@ -160,6 +160,13 @@ export const demoApi = {
     return msg
   },
   editMessage: async (id: string, content: string) => mutateMsg(id, (m) => ({ ...m, content })),
+  // Mirrors realApi.saveVariants: content always tracks the active variant.
+  // Preview has no Postgres, so history just lives in localStorage — always
+  // "persisted" from the caller's point of view.
+  saveVariants: async (id: string, variants: string[], index: number) => {
+    mutateMsg(id, (m) => ({ ...m, content: variants[index], variants, variant_index: index }))
+    return { persisted: true }
+  },
   reactMessage: async (id: string, reaction: Reaction) => mutateMsg(id, (m) => ({ ...m, reaction })),
   deleteMessage: async (id: string) => {
     for (const k of Object.keys(localStorage)) {
