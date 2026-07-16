@@ -8,7 +8,7 @@ import { SESSION_TURN_LIMIT, extractMemories, memoryContext } from '../lib/memor
 import { ACCEPT_DOCS, ACCEPT_IMAGES, readFiles } from '../lib/attachments'
 import type { PendingAttachment } from '../lib/attachments'
 import type { ChatMode, ConnState, Message } from '../lib/types'
-import { versionsOf } from '../lib/types'
+import { MAX_REGENERATIONS, regenerationsLeft, versionsOf } from '../lib/types'
 import { parseFiles, stripStreamingFiles } from '../lib/filegen'
 import { FileCard } from './FileCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
@@ -222,6 +222,9 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   // — regenerating an earlier one would invalidate everything said after it.
   async function regenerateAnswer(m: Message) {
     if (!chatId || streaming || thinking) return
+    // Enforced here as well as on the button: the guard is what actually caps
+    // the model calls, the disabled button is only how we say so.
+    if (regenerationsLeft(m) <= 0) return
     const idx = messages.findIndex((x) => x.id === m.id)
     if (idx === -1) return
     await generate(messages.slice(0, idx), m.mode ?? mode, [], m)
@@ -374,6 +377,7 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
   // the text changes — parsing on every render would re-run on each hover.
   const { segments } = useMemo(() => parseFiles(stripThoughts(m.content), m.id), [m.content, m.id])
   const { index, count } = versionsOf(m)
+  const left = regenerationsLeft(m)
 
   // ── User message: right-aligned ChatGPT-style bubble ─────────────
   if (m.role === 'user') {
@@ -436,7 +440,20 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
           <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
           <button className="act-btn" onClick={onShare}>Share</button>
           {canRegenerate && (
-            <button className="act-btn" disabled={busy} title="Regenerate response" aria-label="Regenerate response" onClick={onRegenerate}><Refresh size={14} /></button>
+            <button
+              className="act-btn"
+              disabled={busy || left <= 0}
+              title={left > 0
+                ? `Regenerate response (${left} of ${MAX_REGENERATIONS} left)`
+                : `No regenerations left — you can regenerate an answer ${MAX_REGENERATIONS} times. Try rewording your question instead.`}
+              aria-label="Regenerate response"
+              onClick={onRegenerate}
+            >
+              <Refresh size={14} />
+              {/* Only shown once some have been used: a "3 left" badge on an
+                  untouched answer would advertise a limit most users never hit. */}
+              {count > 1 && <span style={{ fontSize: 11, marginLeft: 1 }}>{left}</span>}
+            </button>
           )}
         </div>
       </div>

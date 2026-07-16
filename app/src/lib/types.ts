@@ -80,6 +80,23 @@ export function versionsOf(m: Message): { list: string[]; index: number; count: 
   return { list, index, count: list.length }
 }
 
+/**
+ * How many times one reply may be regenerated. Three retries is plenty to get
+ * past a bad answer; past that it is nearly always the question that needs
+ * rewording, not another roll of the dice. Each regeneration is a full model
+ * call, so the cap also bounds cost and the row's stored history.
+ *
+ * Not enforced in the database on purpose: a CHECK on jsonb_array_length would
+ * make the whole UPDATE fail once reached, leaving stored `content` out of sync
+ * with the answer on screen. The UI is the gate.
+ */
+export const MAX_REGENERATIONS = 3
+
+/** Versions = 1 original + up to MAX_REGENERATIONS regenerated. */
+export function regenerationsLeft(m: Message): number {
+  return Math.max(0, MAX_REGENERATIONS - (versionsOf(m).count - 1))
+}
+
 export interface MemoryItem {
   id: string
   fact: string

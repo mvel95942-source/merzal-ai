@@ -366,3 +366,25 @@ export function Trophy(p: IconProps) {
     </Svg>
   )
 }
+
+// Password visibility toggle. Eye = currently hidden (click to reveal);
+// EyeOff = currently visible (click to hide).
+export function Eye(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </Svg>
+  )
+}
+
+export function EyeOff(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M10.6 6.2A9.9 9.9 0 0 1 12 6c6.4 0 10 6 10 6a17.6 17.6 0 0 1-2.6 3.4" />
+      <path d="M6.6 6.7A17.2 17.2 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.5-1.1" />
+      <path d="M14.1 14.1a3 3 0 1 1-4.2-4.3" />
+      <path d="m3 3 18 18" />
+    </Svg>
+  )
+}
