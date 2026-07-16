@@ -130,13 +130,22 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     let raf = 0
     const tick = () => {
       if (shown < target.length) {
-        const remaining = target.length - shown
-        // Reveal one character at a time for a natural typewriter cadence
-        // (Claude / ChatGPT feel). Only nudge faster when a burst of tokens
-        // leaves us far behind, and cap the step low so it never jumps in
-        // visible chunks — the chunky proportional catch-up was the jank.
-        const step = Math.min(remaining, Math.max(1, Math.min(6, Math.ceil(remaining / 40))))
-        shown += step
+        // Everything from a <merzal-file> tag onward is HIDDEN behind the
+        // "Writing your document…" chip, so animating it is pure dead time:
+        // a document body runs to thousands of characters, and at the cadence
+        // below that is 10-20s of the reader waiting on invisible text long
+        // after the model finished. Skip straight to the end once we reach it.
+        const hiddenFrom = target.indexOf('<merzal-file')
+        if (hiddenFrom !== -1 && shown >= hiddenFrom) {
+          shown = target.length
+        } else {
+          const remaining = (hiddenFrom === -1 ? target.length : hiddenFrom) - shown
+          // Reveal one character at a time for a natural typewriter cadence
+          // (Claude / ChatGPT feel). Only nudge faster when a burst of tokens
+          // leaves us far behind, and cap the step low so it never jumps in
+          // visible chunks — the chunky proportional catch-up was the jank.
+          shown += Math.min(remaining, Math.max(1, Math.min(6, Math.ceil(remaining / 40))))
+        }
         setDraft(target.slice(0, shown))
       }
       raf = (!done || shown < target.length) ? requestAnimationFrame(tick) : 0
@@ -361,9 +370,9 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.content)
-  // Split the reply into prose + any documents the model wrote. Recomputed only
-  // when the text changes — parsing on every render would re-run on each hover.
-  const { files, text } = useMemo(() => parseFiles(stripThoughts(m.content), m.id), [m.content, m.id])
+  // Split the reply into ordered prose/document segments. Recomputed only when
+  // the text changes — parsing on every render would re-run on each hover.
+  const { segments } = useMemo(() => parseFiles(stripThoughts(m.content), m.id), [m.content, m.id])
   const { index, count } = versionsOf(m)
 
   // ── User message: right-aligned ChatGPT-style bubble ─────────────
@@ -404,8 +413,13 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
   // ── Assistant message: full-width, no branding, action row ────────
   return (
     <div className="msg" style={{ minWidth: 0 }}>
-      {text && <Markdown text={text} />}
-      {files.map((f) => <FileCard key={f.id} spec={f} />)}
+      {/* Prose and download links in the order the model wrote them, so a reply
+          reads: "here's your guide" → link → "it includes: …". */}
+      {segments.map((s, i) => (
+        s.kind === 'text'
+          ? <Markdown key={`t${i}`} text={s.text} />
+          : <FileCard key={s.spec.id} spec={s.spec} />
+      ))}
       {/* The version arrows stay visible (not hover-only): they're state, not
           an action — hiding "2/2" would leave no sign a v1 exists. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 8 }}>

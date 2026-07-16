@@ -1,18 +1,21 @@
-// Download card for a file the AI generated. Rendered in place of the
-// <merzal-file> block that produced it.
+// The download affordance for a document the AI wrote.
 //
-// The bytes are built lazily on the first click (the writers are dynamic
-// imports — see filegen.ts), then cached on the component so a second download
-// is instant. Size is unknown until that first build, so the card shows the
-// format label up front and fills the size in afterwards rather than blocking
-// the whole reply on work the user may never ask for.
+// Deliberately a LINK, not a card: it renders inline, exactly where the model
+// put the tag, so a reply reads "here's your guide" → link → "it includes: …".
+// A boxed card forced every file to the bottom and broke that narration.
+//
+// Bytes are built lazily on first click (the writers are dynamic imports — see
+// filegen.ts) and cached, so a second download is instant. Size is unknown
+// until that first build, so it appears afterwards rather than blocking a reply
+// on work the user may never ask for.
 import { useState } from 'react'
 import { buildFile, downloadBlob, fullName, humanSize, LABEL } from '../lib/filegen'
 import type { FileSpec } from '../lib/filegen'
-import { Check, FileDoc, Warning } from './Icons'
+import { FileDoc, Warning } from './Icons'
 
 type State = 'idle' | 'building' | 'done' | 'error'
 
+// A hint of the format, so a PDF and a Word doc are told apart at a glance.
 const TINT: Record<string, string> = {
   pdf: '#c0392b', docx: '#2b579a', xlsx: '#1d6f42',
   csv: '#1d6f42', md: '#5c5449', txt: '#5c5449', html: '#bf5e36',
@@ -26,9 +29,8 @@ export function FileCard({ spec }: { spec: FileSpec }) {
 
   async function download() {
     if (state === 'building') return
-    if (blob) { // already built once — no need to pay for it again
+    if (blob) { // already built once — don't pay for it again
       downloadBlob(blob, name)
-      setState('done')
       return
     }
     setState('building')
@@ -43,57 +45,30 @@ export function FileCard({ spec }: { spec: FileSpec }) {
     }
   }
 
-  const tint = TINT[spec.format] ?? 'var(--accent)'
-  const sub =
-    state === 'building' ? 'Preparing…'
-    : state === 'error' ? error
-    : `${LABEL[spec.format]}${blob ? ` · ${humanSize(blob.size)}` : ''}`
+  const failed = state === 'error'
+  const meta = failed ? error
+    : state === 'building' ? 'preparing…'
+    : blob ? `${LABEL[spec.format]} · ${humanSize(blob.size)}`
+    : LABEL[spec.format]
 
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12, margin: '10px 0',
-        padding: '11px 13px', borderRadius: 14, maxWidth: 420,
-        border: '1px solid var(--line-strong)', background: 'var(--surface)',
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 38, height: 38, borderRadius: 10, flex: 'none',
-          background: 'var(--surface-soft)', color: state === 'error' ? 'var(--danger)' : tint,
-        }}
-      >
-        {state === 'error' ? <Warning size={19} /> : <FileDoc size={19} />}
-      </span>
-
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-        <span
-          title={name}
-          style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-        >
-          {name}
-        </span>
-        <span style={{ fontSize: 11.5, color: state === 'error' ? 'var(--danger)' : 'var(--muted)' }}>{sub}</span>
-      </span>
-
+    <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '10px 0', flexWrap: 'wrap' }}>
       <button
         onClick={download}
         disabled={state === 'building'}
+        title={failed ? error : `Download ${name}`}
         aria-label={`Download ${name}`}
-        style={{
-          height: 32, padding: '0 14px', borderRadius: 999, border: 'none', flex: 'none',
-          background: state === 'done' ? 'var(--surface-soft)' : 'var(--ink)',
-          color: state === 'done' ? 'var(--ink)' : 'var(--paper)',
-          fontSize: 12.5, fontWeight: 600,
-          cursor: state === 'building' ? 'default' : 'pointer',
-          opacity: state === 'building' ? 0.6 : 1,
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-        }}
+        className="mz-filelink"
+        style={{ color: failed ? 'var(--danger)' : undefined }}
       >
-        {state === 'done' ? <><Check size={14} /> Saved</> : state === 'error' ? 'Retry' : state === 'building' ? 'Building…' : 'Download'}
+        <span aria-hidden style={{ color: failed ? 'var(--danger)' : TINT[spec.format] ?? 'var(--accent)', display: 'inline-flex', flex: 'none' }}>
+          {failed ? <Warning size={16} /> : <FileDoc size={16} />}
+        </span>
+        <span style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{name}</span>
       </button>
-    </div>
+      <span style={{ fontSize: 11.5, color: failed ? 'var(--danger)' : 'var(--faint)' }}>
+        {meta}{failed ? ' — click to retry' : ''}
+      </span>
+    </span>
   )
 }

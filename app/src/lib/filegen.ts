@@ -10,6 +10,11 @@
 // Tags are used instead of ``` fences on purpose: a generated document very
 // often CONTAINS fenced code, which would terminate a fence-delimited block
 // early. Tags nest safely.
+import { mathForDocument } from './latex'
+import LiberationRegular from '../assets/fonts/LiberationSans-Regular.ttf?url'
+import LiberationBold from '../assets/fonts/LiberationSans-Bold.ttf?url'
+import LiberationItalic from '../assets/fonts/LiberationSans-Italic.ttf?url'
+import LiberationBoldItalic from '../assets/fonts/LiberationSans-BoldItalic.ttf?url'
 
 export type FileFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'md' | 'txt' | 'html'
 
@@ -20,9 +25,37 @@ export interface FileSpec {
   /** Base name, no extension. Already slugified. */
   filename: string
   title: string
-  /** Markdown body of the document. */
+  /** Accent colour for headings/rules/table headers, chosen by the model. */
+  accent: RGB
+  /** Markdown body of the document, math already transcribed to Unicode. */
   content: string
 }
+
+/** A generated document carries no app branding — it is the user's document. */
+export type RGB = [number, number, number]
+
+const DEFAULT_ACCENT: RGB = [40, 40, 40] // near-black: neutral when unspecified
+
+/**
+ * Parse a model-supplied accent. Only #rgb / #rrggbb is accepted — the value
+ * reaches a PDF drawing call and a Word XML attribute, so anything else is
+ * ignored rather than passed through.
+ */
+export function parseAccent(raw: string | undefined): RGB {
+  if (!raw) return DEFAULT_ACCENT
+  const hex = raw.trim().replace(/^#/, '')
+  const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return DEFAULT_ACCENT
+  const n = parseInt(full, 16)
+  const rgb: RGB = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  // Reject near-white: it would be invisible on the page.
+  return rgb[0] > 240 && rgb[1] > 240 && rgb[2] > 240 ? DEFAULT_ACCENT : rgb
+}
+
+const toHex = (c: RGB) => c.map((v) => v.toString(16).padStart(2, '0')).join('')
+/** Very light tint of the accent, for table header fills. */
+const tint = (c: RGB, amount = 0.88): RGB =>
+  c.map((v) => Math.round(v + (255 - v) * amount)) as RGB
 
 const FORMATS: FileFormat[] = ['pdf', 'docx', 'xlsx', 'csv', 'md', 'txt', 'html']
 const EXT: Record<FileFormat, string> = { pdf: 'pdf', docx: 'docx', xlsx: 'xlsx', csv: 'csv', md: 'md', txt: 'txt', html: 'html' }
@@ -60,28 +93,54 @@ export function slug(s: string, fallback = 'document'): string {
 }
 
 /**
- * Pull every complete <merzal-file> block out of an assistant reply.
- * Returns the specs plus the prose with those blocks removed, so the chat
- * bubble shows the model's explanation and a card — never raw tag soup.
+ * A reply is an ordered list of prose and documents. Keeping the order (rather
+ * than "all text, then all files") lets the download link sit exactly where the
+ * model put it — intro, link, then the outline of what's inside — instead of
+ * every file being flushed to the bottom in a rigid block.
  */
-export function parseFiles(content: string, messageId: string): { files: FileSpec[]; text: string } {
+export type Segment =
+  | { kind: 'text'; text: string }
+  | { kind: 'file'; spec: FileSpec }
+
+/**
+ * Split an assistant reply into prose + document segments, in document order.
+ * Raw tag markup never survives this: unknown formats are dropped entirely.
+ */
+export function parseFiles(content: string, messageId: string): { files: FileSpec[]; segments: Segment[] } {
   const files: FileSpec[] = []
+  const segments: Segment[] = []
+  let last = 0
   let i = 0
-  const text = content.replace(BLOCK_RE, (_all, rawAttrs: string, body: string) => {
-    const a = attrs(rawAttrs)
+
+  const pushText = (raw: string) => {
+    const t = raw.replace(/\n{3,}/g, '\n\n').trim()
+    if (t) segments.push({ kind: 'text', text: t })
+  }
+
+  BLOCK_RE.lastIndex = 0 // the regex is /g and module-scoped: reset before use
+  for (let m = BLOCK_RE.exec(content); m; m = BLOCK_RE.exec(content)) {
+    const a = attrs(m[1])
     const format = (a.format || '').toLowerCase() as FileFormat
-    if (!FORMATS.includes(format)) return '' // unknown format → drop the tag, keep the prose
+    pushText(content.slice(last, m.index))
+    last = m.index + m[0].length
+    if (!FORMATS.includes(format)) continue // unknown format → drop it, keep the prose
     const title = (a.title || 'Document').trim()
-    files.push({
+    const spec: FileSpec = {
       id: `${messageId}:${i++}`,
       format,
       filename: slug(a.filename || title),
       title,
-      content: body.trim(),
-    })
-    return '' // the card replaces it
-  })
-  return { files, text: text.replace(/\n{3,}/g, '\n\n').trim() }
+      accent: parseAccent(a.accent),
+      // Transcribe math ONCE, here — every writer downstream renders plain text.
+      // The target matters: Word/HTML draw with system fonts and can show ₂,
+      // but the PDF's embedded font has no subscripts (see latex.ts).
+      content: mathForDocument(m[2].trim(), format === 'pdf' ? 'pdf' : 'unicode'),
+    }
+    files.push(spec)
+    segments.push({ kind: 'file', spec })
+  }
+  pushText(content.slice(last))
+  return { files, segments }
 }
 
 /**
@@ -231,9 +290,47 @@ const plain = (runs: Inline[]) => runs.map((r) => r.text).join('')
 
 // ── Writers ────────────────────────────────────────────────────────────
 
+// jsPDF's built-in Helvetica is WinAnsi (single byte): every codepoint outside
+// Latin-1 is truncated to a byte and drawn as garbage — "6CO₂ + 6H₂O →" came
+// out as "6 C O ‚+ 6 H ‚ O!’". Embedding a real Unicode TTF is the only fix.
+// Liberation Sans is metric-compatible with Helvetica, so layout is unchanged.
+//
+// The fonts are URL assets: fetched only when a PDF is actually built, kept out
+// of the JS bundle, and cached by the browser afterwards.
+const FONT = 'Liberation'
+const FONT_FILES: [style: string, url: string][] = [
+  ['normal', LiberationRegular],
+  ['bold', LiberationBold],
+  ['italic', LiberationItalic],
+  ['bolditalic', LiberationBoldItalic],
+]
+
+const toBase64 = (buf: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buf)
+  let bin = ''
+  // Chunked: one spread of a 140 KB array would blow the call stack.
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(bin)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function embedFonts(doc: any): Promise<void> {
+  const loaded = await Promise.all(
+    FONT_FILES.map(async ([style, url]) => [style, toBase64(await (await fetch(url)).arrayBuffer())] as const),
+  )
+  for (const [style, b64] of loaded) {
+    const vfs = `${FONT}-${style}.ttf`
+    doc.addFileToVFS(vfs, b64)
+    doc.addFont(vfs, FONT, style)
+  }
+}
+
 async function buildPdf(spec: FileSpec): Promise<Blob> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+  await embedFonts(doc)
   const M = 56              // page margin
   const W = doc.internal.pageSize.getWidth() - M * 2
   const BOTTOM = doc.internal.pageSize.getHeight() - M
@@ -250,7 +347,7 @@ async function buildPdf(spec: FileSpec): Promise<Blob> {
     room(lineH)
     for (const run of runs) {
       const style = run.bold ? (baseStyle === 'italic' ? 'bolditalic' : 'bold') : run.italic ? 'italic' : baseStyle
-      doc.setFont(run.code ? 'courier' : 'helvetica', style)
+      doc.setFont(run.code ? 'courier' : FONT, style)
       for (const word of run.text.split(/(\s+)/)) {
         if (!word) continue
         const w = doc.getTextWidth(word)
@@ -265,10 +362,15 @@ async function buildPdf(spec: FileSpec): Promise<Blob> {
     y += lineH
   }
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(20)
+  const [ar, ag, ab] = spec.accent
+  const [tr, tg, tb] = tint(spec.accent)
+
+  doc.setFont(FONT, 'bold'); doc.setFontSize(20)
+  doc.setTextColor(ar, ag, ab)
   const titleLines = doc.splitTextToSize(spec.title, W) as string[]
   for (const l of titleLines) { room(26); doc.text(l, M, y); y += 26 }
-  doc.setDrawColor(191, 94, 54); doc.setLineWidth(1.4)
+  doc.setTextColor(0, 0, 0)
+  doc.setDrawColor(ar, ag, ab); doc.setLineWidth(1.4)
   doc.line(M, y - 12, M + W, y - 12)
   y += 12
 
@@ -276,7 +378,10 @@ async function buildPdf(spec: FileSpec): Promise<Blob> {
     switch (b.type) {
       case 'heading': {
         y += b.level === 1 ? 14 : 10
+        // Headings carry the accent; body text stays black for readability.
+        doc.setTextColor(ar, ag, ab)
         writeRuns(b.runs, b.level === 1 ? 16 : b.level === 2 ? 14 : 12.5, 0, 'bold')
+        doc.setTextColor(0, 0, 0)
         y += 3
         break
       }
@@ -287,7 +392,7 @@ async function buildPdf(spec: FileSpec): Promise<Blob> {
       case 'bullet': {
         const lineH = 11 * 1.45
         room(lineH)
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(11)
+        doc.setFont(FONT, 'normal'); doc.setFontSize(11)
         doc.text(b.marker, M + 8, y)
         writeRuns(b.runs, 11, 30)
         y += 2
@@ -296,7 +401,7 @@ async function buildPdf(spec: FileSpec): Promise<Blob> {
       case 'quote': {
         const top = y - 10
         writeRuns(b.runs, 11, 18, 'italic')
-        doc.setDrawColor(191, 94, 54); doc.setLineWidth(2.5)
+        doc.setDrawColor(ar, ag, ab); doc.setLineWidth(2.5)
         doc.line(M + 4, top, M + 4, y - 12)
         y += 5
         break
@@ -325,10 +430,10 @@ async function buildPdf(spec: FileSpec): Promise<Blob> {
           const cellLines = row.map((c) => doc.splitTextToSize(c, cw - 12) as string[])
           const h = Math.max(...cellLines.map((l) => l.length)) * 12 + 9
           room(h)
-          if (ri === 0) { doc.setFillColor(244, 239, 230); doc.rect(M, y - 10, W, h, 'F') }
-          doc.setFont('helvetica', ri === 0 ? 'bold' : 'normal')
+          if (ri === 0) { doc.setFillColor(tr, tg, tb); doc.rect(M, y - 10, W, h, 'F') }
+          doc.setFont(FONT, ri === 0 ? 'bold' : 'normal')
           cellLines.forEach((ls, ci) => ls.forEach((l, li) => doc.text(l, M + ci * cw + 6, y + li * 12)))
-          doc.setDrawColor(226, 220, 205); doc.setLineWidth(0.5)
+          doc.setDrawColor(tr, tg, tb); doc.setLineWidth(0.5)
           doc.line(M, y + h - 10, M + W, y + h - 10)
           y += h
         }
@@ -338,11 +443,15 @@ async function buildPdf(spec: FileSpec): Promise<Blob> {
     }
   }
 
+  // Page numbers only. The document belongs to the user — it carries no app
+  // branding, so it can be handed in or forwarded as their own work.
   const n = doc.getNumberOfPages()
-  for (let p = 1; p <= n; p++) {
-    doc.setPage(p)
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(154, 143, 125)
-    doc.text(`Generated by Merzal AI · Page ${p} of ${n}`, M, BOTTOM + 26)
+  if (n > 1) {
+    for (let p = 1; p <= n; p++) {
+      doc.setPage(p)
+      doc.setFont(FONT, 'normal'); doc.setFontSize(8.5); doc.setTextColor(150, 150, 150)
+      doc.text(`${p} / ${n}`, M + W, BOTTOM + 26, { align: 'right' })
+    }
   }
   return doc.output('blob')
 }
@@ -351,17 +460,26 @@ async function buildDocx(spec: FileSpec): Promise<Blob> {
   const D = await import('docx')
   const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } = D
 
-  const runs = (rs: Inline[], opts: { italics?: boolean } = {}) =>
+  const runs = (rs: Inline[], opts: { italics?: boolean; color?: string } = {}) =>
     rs.map((r) => new TextRun({
       text: r.text,
       bold: r.bold,
       italics: r.italic || opts.italics,
+      color: opts.color,
       font: r.code ? 'Consolas' : undefined,
-      shading: r.code ? { fill: 'F1EDE4' } : undefined,
+      shading: r.code ? { fill: 'F1F1F1' } : undefined,
     }))
 
+  const accentHex = toHex(spec.accent).toUpperCase()
+  const tintHex = toHex(tint(spec.accent)).toUpperCase()
+
   const children: InstanceType<typeof Paragraph | typeof Table>[] = [
-    new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 240 }, children: [new TextRun({ text: spec.title, bold: true })] }),
+    new Paragraph({
+      heading: HeadingLevel.TITLE,
+      spacing: { after: 240 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: accentHex, space: 6 } },
+      children: [new TextRun({ text: spec.title, bold: true, color: accentHex })],
+    }),
   ]
 
   for (const b of parseMarkdown(spec.content)) {
@@ -370,7 +488,8 @@ async function buildDocx(spec: FileSpec): Promise<Blob> {
         children.push(new Paragraph({
           heading: b.level === 1 ? HeadingLevel.HEADING_1 : b.level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
           spacing: { before: 240, after: 120 },
-          children: runs(b.runs),
+          // Override Word's default blue heading style with the chosen accent.
+          children: runs(b.runs, { color: accentHex }),
         }))
         break
       case 'p':
@@ -386,13 +505,13 @@ async function buildDocx(spec: FileSpec): Promise<Blob> {
       case 'quote':
         children.push(new Paragraph({
           indent: { left: 360 }, spacing: { after: 120 },
-          border: { left: { style: BorderStyle.SINGLE, size: 12, color: 'BF5E36', space: 12 } },
+          border: { left: { style: BorderStyle.SINGLE, size: 12, color: accentHex, space: 12 } },
           children: runs(b.runs, { italics: true }),
         }))
         break
       case 'code':
         children.push(new Paragraph({
-          shading: { fill: 'F6F3ED' }, spacing: { after: 120 },
+          shading: { fill: 'F6F6F6' }, spacing: { after: 120 },
           children: b.text.split('\n').flatMap((l, i) => [
             ...(i ? [new TextRun({ break: 1 })] : []),
             new TextRun({ text: l, font: 'Consolas', size: 19 }),
@@ -400,14 +519,14 @@ async function buildDocx(spec: FileSpec): Promise<Blob> {
         }))
         break
       case 'hr':
-        children.push(new Paragraph({ spacing: { after: 120 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'DCD6CA', space: 8 } }, children: [] }))
+        children.push(new Paragraph({ spacing: { after: 120 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'DDDDDD', space: 8 } }, children: [] }))
         break
       case 'table':
         children.push(new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: b.rows.map((row, ri) => new TableRow({
             children: row.map((c) => new TableCell({
-              shading: ri === 0 ? { fill: 'F4EFE6' } : undefined,
+              shading: ri === 0 ? { fill: tintHex } : undefined,
               margins: { top: 80, bottom: 80, left: 120, right: 120 },
               children: [new Paragraph({ children: [new TextRun({ text: c, bold: ri === 0 })] })],
             })),
@@ -418,11 +537,7 @@ async function buildDocx(spec: FileSpec): Promise<Blob> {
     }
   }
 
-  children.push(new Paragraph({
-    alignment: AlignmentType.CENTER, spacing: { before: 360 },
-    children: [new TextRun({ text: 'Generated by Merzal AI', color: '9A8F7D', size: 17 })],
-  }))
-
+  // No trailing byline: the document is the user's, not the app's.
   const doc = new Document({
     numbering: {
       config: [{
@@ -467,21 +582,26 @@ function buildHtml(spec: FileSpec): Blob {
     }
   }).join('\n')
 
+  const accent = `#${toHex(spec.accent)}`
+  const soft = `#${toHex(tint(spec.accent))}`
+  const line = `#${toHex(tint(spec.accent, 0.7))}`
   return new Blob([`<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(spec.title)}</title><style>
-body{font:16px/1.65 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d1a16;max-width:760px;margin:40px auto;padding:0 20px}
-h1{border-bottom:2px solid #bf5e36;padding-bottom:8px}
-code{background:#f1ede4;padding:1px 5px;border-radius:4px;font-family:Consolas,monospace}
-pre{background:#f6f3ed;padding:14px;border-radius:8px;overflow-x:auto}pre code{background:none;padding:0}
-blockquote{border-left:3px solid #bf5e36;margin:0;padding:2px 16px;color:#5c5449;font-style:italic}
-table{border-collapse:collapse;width:100%}th,td{border:1px solid #e2dccd;padding:8px 10px;text-align:left}th{background:#f4efe6}
-hr{border:none;border-top:1px solid #dcd6ca}
-.foot{margin-top:40px;color:#9a8f7d;font-size:12px;border-top:1px solid #eee;padding-top:12px}
+:root{--accent:${accent};--soft:${soft};--line:${line}}
+body{font:16px/1.65 -apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;max-width:760px;margin:40px auto;padding:0 20px}
+h1{color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:8px}
+h2,h3{color:var(--accent)}
+code{background:#f1f1f1;padding:1px 5px;border-radius:4px;font-family:Consolas,monospace}
+pre{background:#f6f6f6;padding:14px;border-radius:8px;overflow-x:auto}pre code{background:none;padding:0}
+blockquote{border-left:3px solid var(--accent);margin:0;padding:2px 16px;color:#555;font-style:italic}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+th{background:var(--soft)}
+hr{border:none;border-top:1px solid #ddd}
+@media print{body{margin:0}}
 </style></head><body>
 <h1>${esc(spec.title)}</h1>
 ${body}
-<div class="foot">Generated by Merzal AI</div>
 </body></html>`], { type: MIME.html })
 }
 
