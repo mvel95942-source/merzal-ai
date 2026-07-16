@@ -172,13 +172,17 @@ Deno.serve(async (req) => {
 
   // Backend decides which provider + model serves this mode.
   let { provider, model } = routeForMode(mode)
-  // Image requests can't run on a text-only model (e.g. DeepSeek V4 Flash), so
-  // route them to a vision model. Default: DeepSeek V4 Pro on the AICredits
-  // gateway (override with VISION_PROVIDER / VISION_MODEL). If that provider
-  // isn't configured but Gemini is, fall back to Gemini vision.
+  // Image requests need a real MULTIMODAL model. Both DeepSeek V4 flash AND pro
+  // are text-only — the gateway rejects image input with
+  //   404 "No endpoints found that support image input"
+  // (verified against the live API), so routing images there broke every upload.
+  // Default to Gemma 4 26B-A4B: a MoE with only ~4B active params, so it reads
+  // images at a fraction of DeepSeek Flash's cost. Override with
+  // VISION_PROVIDER / VISION_MODEL; fall back to Gemini vision if the AICredits
+  // gateway isn't configured.
   if (hasImageParts(messages)) {
     provider = (Deno.env.get('VISION_PROVIDER') as ProviderId) || 'aicredits'
-    model = Deno.env.get('VISION_MODEL') || 'deepseek/deepseek-v4-pro'
+    model = Deno.env.get('VISION_MODEL') || 'google/gemma-4-26b-a4b-it'
     if ('error' in resolveProvider(provider) && Deno.env.get('GEMINI_API_KEY')) {
       provider = 'gemini'
       model = 'gemini-2.0-flash'

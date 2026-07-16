@@ -54,7 +54,12 @@ const AI_MODELS = ((import.meta.env.VITE_AI_MODEL as string) || 'deepseek/deepse
 // Vision model on the same OpenAI-compatible gateway. DeepSeek V4 Pro is
 // multimodal, so uploaded images/photos are folded in as image_url parts and
 // the model actually sees them (override with VITE_AI_VISION_MODEL).
-const AI_VISION_MODELS = ((import.meta.env.VITE_AI_VISION_MODEL as string) || 'deepseek/deepseek-v4-pro')
+// Vision models, tried in order. DeepSeek V4 (flash AND pro) are TEXT-ONLY — the
+// gateway rejects image input with 404 "No endpoints found that support image
+// input" — so images must go to a real multimodal model. Gemma 4 26B-A4B is a
+// MoE with only ~4B active params: it genuinely reads images at a fraction of
+// DeepSeek Flash's cost. Gemini is the backup if Gemma is unavailable.
+const AI_VISION_MODELS = ((import.meta.env.VITE_AI_VISION_MODEL as string) || 'google/gemma-4-26b-a4b-it,google/gemini-2.5-flash')
   .split(',').map((s) => s.trim()).filter(Boolean)
 const hasAiGateway = !!(AI_BASE && AI_KEY)
 
@@ -152,15 +157,19 @@ async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void, mo
       res = await fetch(`${AI_BASE}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI_KEY}` },
-        // vision=true (DeepSeek V4 Pro): images fold in as image_url parts so the
-        // model sees them. vision=false (V4 Flash): images fold to a text note.
+        // vision=true (a multimodal model): images fold in as image_url parts so
+        // the model sees them. vision=false (DeepSeek text models): images fold
+        // to a short text note instead, so the request never 400s.
         body: JSON.stringify({ model, stream: true, messages: buildMessages(req, system, vision) }),
         signal: req.signal,
       })
     } catch { lastStatus = 0; continue }
     if (res.ok && res.body) return streamOpenAISSE(res, onToken)
     lastStatus = res.status
-    if (res.status === 429 || res.status >= 500) continue // fall through to next model
+    // 404 = model missing OR "no endpoints support image input" — both are
+    // recoverable by trying the next model, so fall through rather than dying on
+    // the first one (that hard-fail is why an image upload surfaced a raw 404).
+    if (res.status === 404 || res.status === 429 || res.status >= 500) continue
     return note(req, onToken, `The model returned an error (${res.status}). Check the AICredits key / model.`)
   }
   return note(req, onToken,
