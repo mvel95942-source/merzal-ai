@@ -107,9 +107,24 @@ async function adminFn(body: Record<string, unknown>): Promise<any> {
 // usable (semester/section simply show as "—").
 const FULL_COLS = 'id,name,mobile,status,user_id,department_id,semester,section,year,created_at'
 const LEGACY_COLS = 'id,name,mobile,status,user_id,department_id,year,created_at'
-function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
-  return error?.code === '42703' || /column .* does not exist/i.test(error?.message ?? '')
+// Postgres reads report 42703; PostgREST WRITES report PGRST204 ("could not
+// find the column in the schema cache"). Both mean the same thing here: the
+// admin-system migration hasn't run yet.
+export function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  const msg = error?.message ?? ''
+  return error?.code === '42703' || error?.code === 'PGRST204'
+    || /column .* does not exist/i.test(msg) || /could not find the '.+' column/i.test(msg)
 }
+
+// ── Import types ──────────────────────────────────────────────────────────
+export interface ImportRow {
+  name: string
+  mobile: string            // enrollment / register number (digits)
+  department_id: string | null
+  semester: number | null
+  section: string | null
+}
+export interface ImportResult { inserted: number; updated: number; skipped: number; failed: number; errors: string[] }
 
 function studentQuery(f: StudentFilters, cols: string) {
   let q = (supabase as any).from('students').select(cols, { count: 'exact' })
@@ -168,6 +183,76 @@ export const adminApi = {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const head = 'name,enrollment,status,department_id,semester,section,year,created_at'
     return [head, ...all.map((r) => [r.name, r.mobile, r.status, r.department_id, r.semester, r.section, r.year, r.created_at].map(esc).join(','))].join('\n')
+  },
+
+  // ── Import: which of these enrollments already exist? (chunked lookup) ──
+  async existingEnrollments(mobiles: string[]): Promise<Set<string>> {
+    const found = new Set<string>()
+    for (let i = 0; i < mobiles.length; i += 500) {
+      const { data, error } = await (supabase as any).from('students').select('mobile').in('mobile', mobiles.slice(i, i + 500))
+      if (error) throw error
+      for (const r of (data ?? []) as { mobile: string }[]) found.add(r.mobile)
+    }
+    return found
+  },
+
+  // ── Import: batched commit. RLS is the authority (a Dept Admin physically
+  // cannot insert rows outside their department). updateExisting=false skips
+  // duplicates; true also refreshes dept/semester/section on matching rows.
+  // Falls back to the legacy column set on un-migrated databases (42703).
+  async importStudents(
+    rows: ImportRow[],
+    opts: { updateExisting: boolean },
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<ImportResult> {
+    const existing = await this.existingEnrollments(rows.map((r) => r.mobile))
+    const res: ImportResult = { inserted: 0, updated: 0, skipped: 0, failed: 0, errors: [] }
+    const toWrite = rows.filter((r) => {
+      if (existing.has(r.mobile) && !opts.updateExisting) { res.skipped++; return false }
+      return true
+    })
+
+    let legacy = false
+    const BATCH = 500
+    for (let i = 0; i < toWrite.length; i += BATCH) {
+      const slice = toWrite.slice(i, i + BATCH)
+      const payload = (withSemSec: boolean) => slice.map((r) => ({
+        name: r.name, mobile: r.mobile, status: 'pending_profile', department_id: r.department_id,
+        ...(withSemSec ? { semester: r.semester, section: r.section } : {}),
+      }))
+      let { error } = await (supabase as any).from('students')
+        .upsert(payload(!legacy), { onConflict: 'mobile', ignoreDuplicates: !opts.updateExisting })
+      if (error && isMissingColumn(error) && !legacy) {
+        legacy = true
+        ;({ error } = await (supabase as any).from('students')
+          .upsert(payload(false), { onConflict: 'mobile', ignoreDuplicates: !opts.updateExisting }))
+      }
+      if (error) {
+        res.failed += slice.length
+        res.errors.push(`Rows ${i + 1}–${i + slice.length}: ${error.message ?? 'write failed'}`)
+      } else {
+        for (const r of slice) { if (existing.has(r.mobile)) res.updated++; else res.inserted++ }
+      }
+      onProgress?.(Math.min(i + BATCH, toWrite.length), toWrite.length)
+    }
+
+    const { data: session } = await supabase.auth.getSession()
+    await (supabase as any).from('audit_log').insert({
+      user_id: session.session?.user.id, action: 'import_students', target: 'bulk',
+      detail: { inserted: res.inserted, updated: res.updated, skipped: res.skipped, failed: res.failed },
+    })
+    return res
+  },
+
+  // ── Single add (Students module). Direct RLS-scoped insert. ─────────────
+  async addStudent(row: ImportRow): Promise<void> {
+    const base = { name: row.name, mobile: row.mobile, status: 'pending_profile', department_id: row.department_id }
+    let { error } = await (supabase as any).from('students').insert({ ...base, semester: row.semester, section: row.section })
+    if (error && isMissingColumn(error)) ({ error } = await (supabase as any).from('students').insert(base))
+    if (error) {
+      if (error.code === '23505') throw new Error('A student with that enrollment already exists.')
+      throw new Error(error.message || 'Could not add student.')
+    }
   },
 
   // ── Privileged lifecycle (edge function; audited server-side) ──────────

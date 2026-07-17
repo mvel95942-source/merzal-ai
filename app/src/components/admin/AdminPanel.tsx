@@ -12,10 +12,10 @@ import { StudentsModule } from './StudentsModule'
 import { DocumentsModule } from './DocumentsModule'
 import { TempKnowledgeModule } from './TempKnowledgeModule'
 import { AdminsModule, AuditModule, DepartmentsModule, SystemModule } from './GovernanceModules'
+import { ImportModule } from './ImportModule'
 
 // Heavy, pre-existing surfaces load on demand.
 const AnalyticsDashboard = lazy(() => import('../AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard })))
-const AdminImport = lazy(() => import('../AdminImport').then((m) => ({ default: m.AdminImport })))
 
 type ModuleKey = 'dashboard' | 'students' | 'documents' | 'updates' | 'admins' | 'departments' | 'analytics' | 'system' | 'audit' | 'import'
 
@@ -59,18 +59,15 @@ export function AdminPanel({ profile, onClose }: { profile: Profile | null; onCl
   // below narrow `route` and confuse the comparison).
   const studentsActive = route === 'students' || route === 'import'
 
-  // Full-screen reuse of the existing heavy surfaces.
+  // Full-screen reuse of the existing analytics surface.
   if (route === 'analytics' && superAdmin) {
     return <Suspense fallback={fallback}><AnalyticsDashboard onClose={() => { window.location.hash = '#/admin' }} /></Suspense>
-  }
-  if (route === 'import') {
-    return <Suspense fallback={fallback}><AdminImport profile={profile} onClose={() => { window.location.hash = '#/admin/students' }} /></Suspense>
   }
 
   const visibleNav = NAV.filter((n) => !n.superOnly || superAdmin)
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', background: 'var(--paper-app)', overflow: 'hidden' }}>
+    <div data-admin style={{ height: '100dvh', display: 'flex', background: 'var(--paper-app)', overflow: 'hidden' }}>
       {/* Left nav */}
       <div style={{ width: navOpen ? 216 : 0, flex: 'none', overflow: 'hidden', transition: 'width .2s ease', borderRight: navOpen ? '1px solid var(--line)' : 'none', background: 'var(--paper-panel)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '16px 14px 10px', fontWeight: 750, fontSize: 14.5, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
@@ -114,6 +111,7 @@ export function AdminPanel({ profile, onClose }: { profile: Profile | null; onCl
           <div style={{ maxWidth: 1080, margin: '0 auto' }}>
             {route === 'dashboard' && <DashboardModule profile={profile} />}
             {route === 'students' && <StudentsModule profile={profile} departments={departments} />}
+            {route === 'import' && <ImportModule profile={profile} departments={departments} />}
             {route === 'documents' && <DocumentsModule profile={profile} departments={departments} />}
             {route === 'updates' && <TempKnowledgeModule profile={profile} departments={departments} />}
             {route === 'admins' && superAdmin && <AdminsModule departments={departments} />}

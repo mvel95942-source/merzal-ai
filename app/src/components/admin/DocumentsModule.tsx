@@ -8,7 +8,7 @@ import { api } from '../../lib/api'
 import type { Department, Profile } from '../../lib/types'
 import { isSuperAdmin } from '../../lib/types'
 import { adminApi, type DocRow } from '../../lib/admin'
-import { Badge, Btn, Card, Empty, Modal, Notice, PageHead, S } from './ui'
+import { Badge, Btn, Card, Empty, Modal, Notice, PageHead, S, Th } from './ui'
 
 const DOC_TYPES = ['timetable', 'syllabus', 'notes', 'policy', 'circular', 'other']
 const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -53,8 +53,8 @@ export function DocumentsModule({ profile, departments }: { profile: Profile | n
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
-              <th style={S.th}>Name</th><th style={S.th}>Type</th><th style={S.th}>Dept</th><th style={S.th}>Sem</th>
-              <th style={S.th}>Visibility</th><th style={S.th}>Status</th><th style={S.th}></th>
+              <Th>Name</Th><Th>Type</Th><Th>Dept</Th><Th>Sem</Th>
+              <Th>Visibility</Th><Th>Status</Th><Th></Th>
             </tr></thead>
             <tbody>
               {docs.map((d) => (

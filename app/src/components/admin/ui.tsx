@@ -1,5 +1,8 @@
 // Shared building blocks for the admin panel. Inline styles on CSS variables,
 // same design language as the rest of the app (light/dark via vars).
+// Accessibility: dialogs trap Escape + take focus, notices announce via
+// role=alert/status, table headers carry scope="col" (see docs/A11Y_AUDIT.md).
+import { useEffect, useRef } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 
 export const S: Record<string, CSSProperties> = {
@@ -13,6 +16,11 @@ export const S: Record<string, CSSProperties> = {
     textTransform: 'uppercase', letterSpacing: '.04em', borderBottom: '1px solid var(--line-strong)', whiteSpace: 'nowrap',
   },
   td: { padding: '9px 10px', fontSize: 13.5, color: 'var(--ink)', borderBottom: '1px solid var(--line)', verticalAlign: 'middle' },
+}
+
+/** Table header cell with the correct scope for screen readers. */
+export function Th({ children }: { children?: ReactNode }) {
+  return <th scope="col" style={S.th}>{children}</th>
 }
 
 export function Btn({ kind = 'ghost', small, style, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { kind?: 'primary' | 'ghost' | 'danger'; small?: boolean }) {
@@ -59,12 +67,30 @@ export function Badge({ tone, children }: { tone: 'ok' | 'warn' | 'off' | 'info'
 }
 
 export function Modal({ title, onClose, children, width = 460 }: { title: string; onClose: () => void; children: ReactNode; width?: number }) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const openerRef = useRef<Element | null>(null)
+
+  // WCAG 2.1.1/2.4.3: Escape closes; focus moves into the dialog on open and
+  // returns to the opening control on close.
+  useEffect(() => {
+    openerRef.current = document.activeElement
+    boxRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      if (openerRef.current instanceof HTMLElement) openerRef.current.focus()
+    }
+  }, [onClose])
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 80, display: 'grid', placeItems: 'center', padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: `min(${width}px, 100%)`, maxHeight: '86vh', overflow: 'auto', background: 'var(--paper-panel)', borderRadius: 14, padding: 20, boxShadow: 'var(--shadow-pop)' }}>
+      <div ref={boxRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: `min(${width}px, 100%)`, maxHeight: '86vh', overflow: 'auto', background: 'var(--paper-panel)', borderRadius: 14, padding: 20, boxShadow: 'var(--shadow-pop)', outline: 'none' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="mz-icon-btn" style={{ width: 32, height: 32 }}>✕</button>
+          <button onClick={onClose} aria-label="Close dialog" className="mz-icon-btn" style={{ width: 32, height: 32 }}>✕</button>
         </div>
         {children}
       </div>
@@ -74,7 +100,7 @@ export function Modal({ title, onClose, children, width = 460 }: { title: string
 
 export function Notice({ tone, text }: { tone: 'ok' | 'err'; text: string }) {
   return (
-    <div style={{
+    <div role={tone === 'err' ? 'alert' : 'status'} style={{
       padding: '8px 12px', borderRadius: 8, fontSize: 13, marginBottom: 10,
       background: tone === 'ok' ? 'var(--accent-soft)' : 'rgba(239,68,68,.08)',
       color: tone === 'ok' ? 'var(--accent)' : 'var(--danger)',

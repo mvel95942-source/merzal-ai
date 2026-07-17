@@ -5,7 +5,7 @@ import { api } from '../../lib/api'
 import { brand } from '../../lib/brand'
 import type { AdminUser, Department } from '../../lib/types'
 import { adminApi, type AuditRow } from '../../lib/admin'
-import { Badge, Btn, Card, Empty, Modal, Notice, PageHead, S } from './ui'
+import { Badge, Btn, Card, Empty, Modal, Notice, PageHead, S, Th } from './ui'
 
 // ── DEPARTMENTS ────────────────────────────────────────────────────────────
 export function DepartmentsModule({ departments, onChanged }: { departments: Department[]; onChanged: () => void }) {
@@ -34,7 +34,7 @@ export function DepartmentsModule({ departments, onChanged }: { departments: Dep
       </Card>
       <Card style={{ padding: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={S.th}>Code</th><th style={S.th}>Name</th><th style={S.th}></th></tr></thead>
+          <thead><tr><Th>Code</Th><Th>Name</Th><Th></Th></tr></thead>
           <tbody>
             {departments.map((d) => (
               <tr key={d.id}>
@@ -104,7 +104,7 @@ export function AdminsModule({ departments }: { departments: Department[] }) {
       </Card>
       <Card style={{ padding: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={S.th}>Name</th><th style={S.th}>Register</th><th style={S.th}>Scope</th><th style={S.th}></th></tr></thead>
+          <thead><tr><Th>Name</Th><Th>Register</Th><Th>Scope</Th><Th></Th></tr></thead>
           <tbody>
             {admins.map((a) => (
               <tr key={a.user_id}>
@@ -143,7 +143,7 @@ export function AuditModule() {
       <Card style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={S.th}>When</th><th style={S.th}>Action</th><th style={S.th}>Target</th><th style={S.th}>Detail</th></tr></thead>
+            <thead><tr><Th>When</Th><Th>Action</Th><Th>Target</Th><Th>Detail</Th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
