@@ -37,11 +37,33 @@ function hasImageParts(messages: Msg[]): boolean {
   return messages.some((m) => Array.isArray(m.content) && (m.content as { type?: string }[]).some((p) => p?.type === 'image_url'))
 }
 
-function systemPrompt(mode: string, context: string): string {
+function systemPrompt(mode: string, context: string, updates: string): string {
   const base = mode === 'campus'
     ? "You are a private campus assistant. Be concise, helpful, and accurate. Ground answers in the provided campus context when present; if the context doesn't cover it, say you don't have that information."
     : 'You are Merzal AI, a helpful, concise assistant.'
-  return context ? `${base}\n\nContext:\n${context}` : base
+  // Temporary knowledge: short-lived, admin-authored campus facts (never
+  // indexed). Placed before document context so time-sensitive updates win.
+  const withUpdates = updates ? `${base}\n\nCampus updates (current, time-sensitive — mention when relevant):\n${updates}` : base
+  return context ? `${withUpdates}\n\nContext:\n${context}` : withUpdates
+}
+
+// Bounded prompt block from the caller's ACTIVE temporary knowledge. The RPC
+// is SECURITY DEFINER keyed to auth.uid(): scope (dept/semester/section/
+// visibility/time window) is resolved server-side from the stored profile —
+// nothing the client sends can widen it.
+const TEMP_KNOWLEDGE_CHAR_BUDGET = 2_000
+async function tempKnowledgeBlock(supabase: SupabaseClient): Promise<string> {
+  try {
+    const { data } = await supabase.rpc('active_temp_knowledge')
+    const items = (data ?? []) as { title: string; content: string }[]
+    let out = ''
+    for (const it of items) {
+      const line = `- ${it.title}: ${it.content}\n`
+      if (out.length + line.length > TEMP_KNOWLEDGE_CHAR_BUDGET) break
+      out += line
+    }
+    return out.trimEnd()
+  } catch { return '' }
 }
 
 // ── Grounding cache ───────────────────────────────────────────────────────
@@ -52,7 +74,6 @@ function systemPrompt(mode: string, context: string): string {
 // slow" bug: the stall was ours, not the model's. Cache both in module scope
 // (kept across warm invocations) so grounding is fetched once, then reused.
 const GROUND_TTL_MS = 10 * 60_000 // 10 min — occasional refresh if docs change
-let docIdsCache: { at: number; ids: string[] } | null = null
 let piCache: { at: number; ids: string; text: string } | null = null
 let treeCache: { at: number; ids: string; nodes: FlatNode[] } | null = null
 
@@ -60,9 +81,12 @@ let treeCache: { at: number; ids: string; nodes: FlatNode[] } | null = null
 type FlatNode = { id: string; title: string; summary: string; text: string }
 type TreeNode = { node_id?: string; title?: string; summary?: string; text?: string; nodes?: TreeNode[] }
 
-// Campus doc ids: admin-managed table first, else the PAGEINDEX_DOC_ID secret.
+// Campus doc ids for THIS caller. Queried through the user's own RLS-scoped
+// client, so students only ever see documents whose metadata (department /
+// semester / section / visibility / date window) targets them — RBAC happens
+// here, BEFORE any retrieval. Deliberately NOT cached in module scope: a
+// global cache would leak one user's document scope to the next request.
 async function campusDocIds(supabase: SupabaseClient): Promise<string[]> {
-  if (docIdsCache && Date.now() - docIdsCache.at < GROUND_TTL_MS) return docIdsCache.ids
   let ids: string[] = []
   try {
     const { data } = await supabase.from('pageindex_docs').select('doc_id')
@@ -72,7 +96,6 @@ async function campusDocIds(supabase: SupabaseClient): Promise<string[]> {
     const envDoc = Deno.env.get('PAGEINDEX_DOC_ID') || ''
     ids = envDoc ? envDoc.split(',').map((s) => s.trim()).filter(Boolean) : []
   }
-  docIdsCache = { at: Date.now(), ids }
   return ids
 }
 
@@ -192,6 +215,12 @@ Deno.serve(async (req) => {
   const { data: userData, error: authErr } = await supabase.auth.getUser()
   if (authErr || !userData.user) return json({ error: 'unauthorized' }, 401)
 
+  // RBAC gate before ANY retrieval: a disabled profile gets nothing, and all
+  // knowledge scoping below derives from the stored profile via RLS / the
+  // active_temp_knowledge RPC — never from the request body.
+  const { data: prof } = await supabase.from('user_profiles').select('disabled').eq('id', userData.user.id).maybeSingle()
+  if (prof?.disabled) return json({ error: 'account_disabled' }, 403)
+
   let body: { mode?: string; context?: string; messages: Msg[] }
   try { body = await req.json() } catch { return json({ error: 'invalid json' }, 400) }
   const { mode = 'campus', context = '', messages } = body
@@ -199,8 +228,13 @@ Deno.serve(async (req) => {
 
   const images = hasImageParts(messages)
 
-  // Campus grounding: hierarchical tree search over the PageIndex index (our LLM
-  // picks the relevant sections), then DeepSeek answers from just those sections.
+  // 1) Temporary knowledge — lightweight prompt layer, loaded for every
+  //    response, before (and independent of) PageIndex retrieval.
+  const updates = await tempKnowledgeBlock(supabase)
+
+  // 2) Campus grounding: hierarchical tree search over the PageIndex index (our
+  //    LLM picks the relevant sections) — restricted to the docs this caller may
+  //    see (campusDocIds is RLS-scoped).
   let ctx = context
   if (mode === 'campus' && !images) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')
@@ -209,7 +243,7 @@ Deno.serve(async (req) => {
     if (grounding) ctx = ctx ? `${ctx}\n\n${grounding}` : grounding
   }
 
-  const chat: Msg[] = [{ role: 'system', content: systemPrompt(mode, ctx) }, ...messages]
+  const chat: Msg[] = [{ role: 'system', content: systemPrompt(mode, ctx, updates) }, ...messages]
 
   // Provider fallback chain.
   const attempts: { base: string; key: string; model: string }[] = []
