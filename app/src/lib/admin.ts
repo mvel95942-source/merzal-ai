@@ -87,7 +87,14 @@ async function adminFn(body: Record<string, unknown>): Promise<any> {
     },
     body: JSON.stringify(body),
   })
-  const json = await res.json()
+  // The `admin` edge function may not be deployed yet — a 404 returns an HTML
+  // page, so guard the JSON parse and give a clear, actionable message rather
+  // than a cryptic "Unexpected token <".
+  if (res.status === 404) {
+    throw new Error('The admin service isn’t deployed yet. Deploy the `admin` edge function to enable password resets, disable/enable, and bulk actions.')
+  }
+  let json: any
+  try { json = await res.json() } catch { throw new Error(`The admin service returned an unexpected response (${res.status}).`) }
   if (!res.ok || json.error) {
     const nice: Record<string, string> = {
       forbidden: 'You are not allowed to do that.',
@@ -115,6 +122,15 @@ export function isMissingColumn(error: { code?: string; message?: string } | nul
   return error?.code === '42703' || error?.code === 'PGRST204'
     || /column .* does not exist/i.test(msg) || /could not find the '.+' column/i.test(msg)
 }
+
+// The admin-system migration hasn't created a table yet. Postgres reports
+// 42P01 (undefined_table); PostgREST reports PGRST205 (not in schema cache).
+export function isMissingTable(error: { code?: string; message?: string } | null): boolean {
+  const msg = error?.message ?? ''
+  return error?.code === '42P01' || error?.code === 'PGRST205'
+    || /relation .* does not exist/i.test(msg) || /could not find the table/i.test(msg)
+}
+const NOT_READY = 'Temporary updates aren’t enabled yet — apply the admin-system database migration to turn this feature on.'
 
 // ── Import types ──────────────────────────────────────────────────────────
 export interface ImportRow {
@@ -287,7 +303,7 @@ export const adminApi = {
   async listTempKnowledge(): Promise<TempKnowledge[]> {
     const { data, error } = await (supabase as any).from('temporary_knowledge')
       .select('*').order('active', { ascending: false }).order('expires_at', { ascending: true }).limit(200)
-    if (error) throw error
+    if (error) throw new Error(isMissingTable(error) ? NOT_READY : (error.message || 'Could not load updates.'))
     return (data ?? []) as TempKnowledge[]
   },
 
@@ -297,17 +313,17 @@ export const adminApi = {
     const { error } = item.id
       ? await (supabase as any).from('temporary_knowledge').update(row).eq('id', item.id)
       : await (supabase as any).from('temporary_knowledge').insert(row)
-    if (error) throw new Error(error.message || 'Could not save the update.')
+    if (error) throw new Error(isMissingTable(error) ? NOT_READY : (error.message || 'Could not save the update.'))
   },
 
   async setTempKnowledgeActive(id: string, active: boolean): Promise<void> {
     const { error } = await (supabase as any).from('temporary_knowledge').update({ active, updated_at: new Date().toISOString() }).eq('id', id)
-    if (error) throw error
+    if (error) throw new Error(isMissingTable(error) ? NOT_READY : (error.message || 'Could not update.'))
   },
 
   async deleteTempKnowledge(id: string): Promise<void> {
     const { error } = await (supabase as any).from('temporary_knowledge').delete().eq('id', id)
-    if (error) throw error
+    if (error) throw new Error(isMissingTable(error) ? NOT_READY : (error.message || 'Could not delete.'))
   },
 
   // ── Documents: metadata that gates retrieval (content lives in PageIndex) ─
@@ -331,11 +347,15 @@ export const adminApi = {
 
   // ── Dashboard counts (four cheap head-only queries) ─────────────────────
   async dashboardCounts(): Promise<{ students: number; departments: number; docs: number; updates: number }> {
+    // Each count is independent and resilient: a missing table/column (before
+    // the migration) yields 0 rather than failing the whole dashboard.
     const count = async (table: string, filter?: (q: any) => any) => {
-      let q = (supabase as any).from(table).select('id', { count: 'exact', head: true })
-      if (filter) q = filter(q)
-      const { count: n } = await q
-      return n ?? 0
+      try {
+        let q = (supabase as any).from(table).select('id', { count: 'exact', head: true })
+        if (filter) q = filter(q)
+        const { count: n } = await q
+        return n ?? 0
+      } catch { return 0 }
     }
     const nowIso = new Date().toISOString()
     const [students, departments, docs, updates] = await Promise.all([
