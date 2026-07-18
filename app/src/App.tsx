@@ -11,9 +11,10 @@ import { Settings } from './components/Settings'
 import { SharedView } from './components/SharedView'
 import { InstallPrompt } from './components/InstallPrompt'
 // Admin-only surfaces are code-split so students never download xlsx/charts.
-const AdminImport = lazy(() => import('./components/AdminImport').then((m) => ({ default: m.AdminImport })))
+const AdminPanel = lazy(() => import('./components/admin/AdminPanel').then((m) => ({ default: m.AdminPanel })))
 const FeedbackInbox = lazy(() => import('./components/FeedbackInbox').then((m) => ({ default: m.FeedbackInbox })))
 const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard })))
+import { ForcePasswordChange } from './components/ForcePasswordChange'
 import { ShareSheet } from './components/ShareSheet'
 import type { ShareTarget } from './components/ShareSheet'
 import { exportPdf, exportText } from './lib/export'
@@ -45,7 +46,7 @@ export default function App() {
 
   // Public read-only share route: #/share/<token> — no auth required.
   const shareToken = hash.startsWith('#/share/') ? hash.slice('#/share/'.length) : null
-  const adminRoute = hash === '#/admin'
+  const adminRoute = hash === '#/admin' || hash.startsWith('#/admin/')
   const feedbackRoute = hash === '#/feedback'
   const analyticsRoute = hash === '#/analytics'
 
@@ -104,7 +105,11 @@ export default function App() {
   // are Super Admin only — both here and server-side via RLS. Lazy surfaces are
   // wrapped in Suspense so their chunk loads on demand.
   const routeFallback = <div style={{ height: '100vh', display: 'grid', placeItems: 'center', color: 'var(--faint)', background: 'var(--paper-app)' }}>Loading…</div>
-  if (adminRoute && phase === 'app' && isAdmin(profile)) return <Suspense fallback={routeFallback}><AdminImport profile={profile} onClose={() => { window.location.hash = '' }} /></Suspense>
+  // Admin reset a password → force a new one before anything else renders.
+  if (phase === 'app' && profile?.must_change_password) {
+    return <ForcePasswordChange onDone={() => { setProfile((p) => (p ? { ...p, must_change_password: false } : p)) }} />
+  }
+  if (adminRoute && phase === 'app' && isAdmin(profile)) return <Suspense fallback={routeFallback}><AdminPanel profile={profile} onClose={() => { window.location.hash = '' }} /></Suspense>
   if (feedbackRoute && phase === 'app' && isSuperAdmin(profile)) return <Suspense fallback={routeFallback}><FeedbackInbox onClose={() => { window.location.hash = '' }} /></Suspense>
   if (analyticsRoute && phase === 'app' && isSuperAdmin(profile)) return <Suspense fallback={routeFallback}><AnalyticsDashboard onClose={() => { window.location.hash = '' }} /></Suspense>
 

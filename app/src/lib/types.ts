@@ -8,8 +8,12 @@ export interface Profile {
   department: string | null
   department_id?: string | null
   semester: number | null
+  section?: string | null
   role: string
   onboarding_done: boolean
+  /** Set by an admin password reset; the app forces a new password before chat. */
+  must_change_password?: boolean
+  disabled?: boolean
 }
 
 // RBAC helpers. Two admin tiers, distinguished by department_id:
