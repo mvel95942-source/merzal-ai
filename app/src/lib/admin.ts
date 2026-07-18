@@ -126,9 +126,27 @@ export interface ImportRow {
 }
 export interface ImportResult { inserted: number; updated: number; skipped: number; failed: number; errors: string[] }
 
+// Safe CSV cell. Quotes/escapes per RFC 4180, AND prefixes a leading formula
+// trigger (= + - @, tab, CR) with a single quote so spreadsheet apps treat a
+// crafted student name as text instead of executing it (CSV formula injection).
+export function csvCell(v: unknown): string {
+  let s = String(v ?? '')
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
+  return `"${s.replace(/"/g, '""')}"`
+}
+
+// PostgREST filter strings treat , . () : " as structural. Interpolating raw
+// search text into .or() would let it re-shape the query (RLS still bounds
+// which rows return, but a name like "Priya, S" would otherwise break search
+// and the pattern is an injection smell). Keep only characters that legitimately
+// appear in a name or enrollment number.
+function safeSearch(s: string): string {
+  return s.replace(/[^\p{L}\p{N} .@_-]/gu, '').slice(0, 80)
+}
+
 function studentQuery(f: StudentFilters, cols: string) {
   let q = (supabase as any).from('students').select(cols, { count: 'exact' })
-  const s = (f.search ?? '').trim()
+  const s = safeSearch((f.search ?? '').trim())
   if (s) q = q.or(`name.ilike.%${s}%,mobile.ilike.%${s}%`)
   if (f.department_id) q = q.eq('department_id', f.department_id)
   if (cols === FULL_COLS) {
@@ -180,7 +198,7 @@ export const adminApi = {
     await (supabase as any).from('audit_log').insert({
       user_id: session.session?.user.id, action: 'export_students', target: 'csv', detail: { rows: all.length, filters: f },
     })
-    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const esc = csvCell
     const head = 'name,enrollment,status,department_id,semester,section,year,created_at'
     return [head, ...all.map((r) => [r.name, r.mobile, r.status, r.department_id, r.semester, r.section, r.year, r.created_at].map(esc).join(','))].join('\n')
   },

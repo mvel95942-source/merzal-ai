@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Department, Profile } from '../../lib/types'
 import { isSuperAdmin } from '../../lib/types'
-import { adminApi, type ImportResult, type ImportRow } from '../../lib/admin'
+import { adminApi, csvCell, type ImportResult, type ImportRow } from '../../lib/admin'
 import { Badge, Btn, Card, Notice, PageHead, S, Th } from './ui'
 
 const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -162,8 +162,7 @@ export function ImportModule({ profile, departments }: { profile: Profile | null
 
   function downloadErrors() {
     if (!prepared?.bad.length) return
-    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
-    const csv = ['line,reason,row', ...prepared.bad.map((b) => `${b.line},${esc(b.reason)},${esc(b.cells.join(' | '))}`)].join('\n')
+    const csv = ['line,reason,row', ...prepared.bad.map((b) => `${b.line},${csvCell(b.reason)},${csvCell(b.cells.join(' | '))}`)].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     a.download = 'import-errors.csv'
