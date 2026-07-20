@@ -54,6 +54,13 @@ export interface Chat {
   bucket: string
   pinned: boolean
   updated_at: string
+  /**
+   * Number of messages in the chat. Seeded from the DB on load and kept in sync
+   * client-side (0 on create, ≥1 after the first message). Used to gate "New
+   * chat": we refuse to spawn a second empty chat while one already exists, so
+   * the sidebar can't fill with abandoned rows. Absent ⇒ treat as unknown/0.
+   */
+  msgCount?: number
 }
 
 export interface Message {

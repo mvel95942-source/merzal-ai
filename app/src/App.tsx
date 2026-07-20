@@ -34,6 +34,7 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(true) // desktop sidebar collapse (mobile-first: hideable)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
+  const [newChatHint, setNewChatHint] = useState(false)
   const [hash, setHash] = useState(typeof window !== 'undefined' ? window.location.hash : '')
   const conn = useConnection()
   const isMobile = useIsMobile()
@@ -43,6 +44,13 @@ export default function App() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  // Auto-dismiss the "start a conversation first" nudge.
+  useEffect(() => {
+    if (!newChatHint) return
+    const t = setTimeout(() => setNewChatHint(false), 2800)
+    return () => clearTimeout(t)
+  }, [newChatHint])
 
   // Public read-only share route: #/share/<token> — no auth required.
   const shareToken = hash.startsWith('#/share/') ? hash.slice('#/share/'.length) : null
@@ -82,13 +90,26 @@ export default function App() {
     return () => data.subscription.unsubscribe()
   }, [loadAfterAuth])
 
+  // Enforce one conversation per chat: never spawn a second empty chat while one
+  // already exists. If the user clicks "New chat" with an untouched chat around,
+  // we just surface that chat (and nudge them) instead of piling up blank rows.
   async function newChat() {
+    const empty = chats.find((c) => (c.msgCount ?? 0) === 0)
+    if (empty) {
+      setActiveId(empty.id)
+      if (empty.id === activeId) setNewChatHint(true) // already here → they need a reason why nothing changed
+      return
+    }
     const c = await api.createChat()
     setChats((prev) => [c, ...prev])
     setActiveId(c.id)
   }
 
+  // Lazily reuse/create the active chat. Reuses an existing empty chat so we
+  // don't strand the user on a blank chat while another empty one lingers.
   async function ensureActive() {
+    const empty = chats.find((c) => (c.msgCount ?? 0) === 0)
+    if (empty) { setActiveId(empty.id); return empty.id }
     const c = await api.createChat()
     setChats((prev) => [c, ...prev])
     setActiveId(c.id)
@@ -97,7 +118,8 @@ export default function App() {
 
   async function onFirstMessage(chatId: string, title: string) {
     await api.renameChat(chatId, title)
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title } : c)))
+    // First message lands → chat is no longer empty, so "New chat" is unlocked.
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title, msgCount: (c.msgCount ?? 0) + 1 } : c)))
   }
 
   if (shareToken) return <SharedView token={shareToken} />
@@ -199,8 +221,19 @@ export default function App() {
       )}
 
       {shareItem && <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />}
+      {newChatHint && <NewChatHint />}
       {conn === 'offline' && <OfflineToast queued={queued} />}
       <InstallPrompt />
+    </div>
+  )
+}
+
+// Nudge shown when the user hits "New chat" on an already-empty chat: explains
+// why no new chat appeared (one conversation per chat before starting another).
+function NewChatHint() {
+  return (
+    <div style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 9, background: 'var(--ink)', color: 'var(--paper)', padding: '9px 16px', borderRadius: 999, fontSize: 13, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', animation: 'mz-rise .3s both' }}>
+      Start this chat before opening a new one
     </div>
   )
 }
