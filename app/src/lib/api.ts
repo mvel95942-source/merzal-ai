@@ -302,8 +302,8 @@ const realApi = {
     return data.session
   },
 
-  onAuthChange(cb: () => void) {
-    return supabase.auth.onAuthStateChange(() => cb())
+  onAuthChange(cb: (event: string) => void) {
+    return supabase.auth.onAuthStateChange((event) => cb(event))
   },
 
   // ── PROFILE ───────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { api, emailToRoll } from './lib/api'
 import { hasSupabase } from './lib/supabase'
 import { brand } from './lib/brand'
@@ -58,35 +58,61 @@ export default function App() {
   const feedbackRoute = hash === '#/feedback'
   const analyticsRoute = hash === '#/analytics'
 
+  // Guards against overlapping boots. Supabase fires INITIAL_SESSION on load AND
+  // we call this directly, so two runs used to race (duplicate network, chat
+  // flicker). A monotonic token lets only the newest run commit its results.
+  const bootSeq = useRef(0)
   const loadAfterAuth = useCallback(async () => {
-    const session = await api.getSession()
-    if (!session) { setPhase('login'); return }
-    setAccount(emailToRoll(session.user.email) ?? 'You')
-    const prof = await api.getProfile()
-    if (prof && !prof.onboarding_done) {
-      await api.upsertProfile({ onboarding_done: true })
-      setProfile({ ...prof, onboarding_done: true })
-    } else {
-      setProfile(prof)
+    const seq = ++bootSeq.current
+    const stale = () => seq !== bootSeq.current
+    try {
+      const session = await api.getSession()
+      if (stale()) return
+      if (!session) { setPhase('login'); return }
+      setAccount(emailToRoll(session.user.email) ?? 'You')
+
+      // Continue a conversation opened from a share link (before the chat list).
+      let openId = localStorage.getItem('merzal_open_chat')
+      const contTok = localStorage.getItem('merzal_continue_token')
+      if (contTok) {
+        try { const id = await api.importSharedChat(contTok); if (id) openId = id } catch { /* ignore */ }
+        localStorage.removeItem('merzal_continue_token')
+      }
+      localStorage.removeItem('merzal_open_chat')
+
+      // Profile and chat list are independent — fetch in parallel so the slower
+      // of the two gates boot, not their sum. A failure in either must NOT hang
+      // the app on the loading screen (that was the "refresh many times" bug).
+      const [prof, list] = await Promise.all([
+        api.getProfile().catch(() => null),
+        api.listChats().catch(() => [] as Chat[]),
+      ])
+      if (stale()) return
+      if (prof && !prof.onboarding_done) {
+        api.upsertProfile({ onboarding_done: true }).catch(() => {})
+        setProfile({ ...prof, onboarding_done: true })
+      } else {
+        setProfile(prof)
+      }
+      setChats(list)
+      setActiveId(openId ?? list[0]?.id ?? null)
+      setPhase('app')
+    } catch {
+      // Never strand the user on "Loading…": on any unexpected error, fall back
+      // to the login screen so a retry is one tap away, not a full refresh.
+      if (!stale()) setPhase((p) => (p === 'app' ? p : 'login'))
     }
-    // Continue a conversation opened from a share link.
-    let openId = localStorage.getItem('merzal_open_chat')
-    const contTok = localStorage.getItem('merzal_continue_token')
-    if (contTok) {
-      try { const id = await api.importSharedChat(contTok); if (id) openId = id } catch { /* ignore */ }
-      localStorage.removeItem('merzal_continue_token')
-    }
-    localStorage.removeItem('merzal_open_chat')
-    const list = await api.listChats()
-    setChats(list)
-    setActiveId(openId ?? list[0]?.id ?? null)
-    setPhase('app')
   }, [])
 
   useEffect(() => {
     if (!hasSupabase) { setPhase('login'); return }
     loadAfterAuth()
-    const { data } = api.onAuthChange(() => loadAfterAuth())
+    // Only reload on a real sign-in/out. INITIAL_SESSION duplicates the direct
+    // call above; TOKEN_REFRESHED / USER_UPDATED fire periodically and must NOT
+    // reload — doing so reset the open chat mid-session and re-ran all boot I/O.
+    const { data } = api.onAuthChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') loadAfterAuth()
+    })
     return () => data.subscription.unsubscribe()
   }, [loadAfterAuth])
 

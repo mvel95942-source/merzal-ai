@@ -3,6 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { initBrand } from './lib/brand'
+import { initTheme } from './lib/theme'
+
+// Apply the user's saved theme (light/dark/system + accent) before first paint
+// so there is no flash of the wrong colours.
+initTheme()
 
 // Resolve the tenant brand (env + optional runtime JSON) before first paint so
 // the app renders fully branded — no flash of the default identity.

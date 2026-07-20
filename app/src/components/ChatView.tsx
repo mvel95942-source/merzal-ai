@@ -18,6 +18,7 @@ import type { ShareTarget } from './ShareSheet'
 import { Markdown } from './Markdown'
 import { stripThoughts } from '../lib/format'
 import { isDemo, exitDemo } from '../lib/demo'
+import { cancelSpeech, isSpeechSupported, speak, speakableText } from '../lib/tts'
 import { PREVIEW_LIMIT, previewRemaining } from '../lib/preview'
 import { Camera, Check, FileDoc, Image, Plus, Refresh, ThumbDown, ThumbUp, Warning } from './Icons'
 
@@ -46,6 +47,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [feedbackFor, setFeedbackFor] = useState<{ m: Message; type: 'up' | 'down' } | null>(null)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [speakingId, setSpeakingId] = useState<string | null>(null)
   const [previewLeft, setPreviewLeft] = useState(() => (isDemo() ? previewRemaining() : PREVIEW_LIMIT))
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -62,6 +64,9 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     return () => window.removeEventListener('merzal-preview', on)
   }, [])
 
+  // Stop any read-aloud when this view goes away (navigating off, sign-out).
+  useEffect(() => () => cancelSpeech(), [])
+
   useEffect(() => {
     chatIdRef.current = chatId
     // Switching chats: clear any transient streaming UI so a reply still
@@ -71,6 +76,8 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     setStreaming(false)
     setDraft('')
     setRegeneratingId(null)
+    cancelSpeech()
+    setSpeakingId(null)
     if (!chatId) { setMessages([]); return }
     // Guard the async result too: a slow fetch for an old chat must not overwrite
     // the messages of the one now on screen.
@@ -338,6 +345,8 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
                   onEditSubmit={(text) => regenerate(m, text)}
                   onRegenerate={() => regenerateAnswer(m)}
                   onVersion={(idx) => switchVersion(m, idx)}
+                  speaking={speakingId === m.id}
+                  onSpeak={() => toggleSpeak(m)}
                 />
               )
             ))}
@@ -379,6 +388,15 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reaction: next } : x)))
     await api.reactMessage(m.id, next)
   }
+
+  // Read a reply aloud (Web Speech). Toggle: speaking the same message stops it.
+  function toggleSpeak(m: Message) {
+    if (speakingId === m.id) { cancelSpeech(); setSpeakingId(null); return }
+    const text = speakableText(m.content)
+    if (!text) return
+    setSpeakingId(m.id)
+    speak(text, () => setSpeakingId((cur) => (cur === m.id ? null : cur)))
+  }
 }
 
 // Assistant streaming/thinking wrapper — no name, no avatar: clean convo style.
@@ -390,7 +408,7 @@ function AssistantWrap({ children }: { children: React.ReactNode }) {
   )
 }
 
-function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEditSubmit, onRegenerate, onVersion }: {
+function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEditSubmit, onRegenerate, onVersion, speaking, onSpeak }: {
   m: Message
   busy: boolean
   canRegenerate: boolean
@@ -400,6 +418,8 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
   onEditSubmit: (text: string) => void
   onRegenerate: () => void
   onVersion: (index: number) => void
+  speaking: boolean
+  onSpeak: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.content)
@@ -469,6 +489,13 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
           <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}><ThumbDown size={15} /></button>
           <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
           <button className="act-btn" onClick={onShare}>Share</button>
+          {isSpeechSupported() && (
+            <button className={'act-btn' + (speaking ? ' on' : '')} title={speaking ? 'Stop' : 'Read aloud'} aria-label={speaking ? 'Stop reading' : 'Read aloud'} onClick={onSpeak}>
+              {speaking
+                ? <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></svg>}
+            </button>
+          )}
           {canRegenerate && (
             <button
               className="act-btn"

@@ -7,6 +7,7 @@ import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import { normalizeMath } from '../lib/latex'
 import { highlight } from '../lib/highlight'
+import { codeExt, downloadBlob } from '../lib/filegen'
 
 // Renders assistant text as Markdown with GFM + LaTeX math.
 // Bold/headings/lists let the model emphasise what matters; KaTeX renders
@@ -52,11 +53,20 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
       setTimeout(() => setCopied(false), 1400)
     }).catch(() => {})
   }
+  // Export the snippet as a real source file with the right extension for `lang`
+  // (bubble-sort.py, script.js, …), indentation preserved exactly.
+  const save = () => {
+    const body = code.endsWith('\n') ? code : code + '\n'
+    downloadBlob(new Blob([body], { type: 'text/plain;charset=utf-8' }), `snippet.${codeExt(lang)}`)
+  }
   return (
     <div className="mz-code">
       <div className="mz-code-head">
         <span className="mz-code-lang">{lang || 'code'}</span>
-        <button type="button" className="mz-code-copy" onClick={copy} aria-label="Copy code">{copied ? 'Copied' : 'Copy'}</button>
+        <span style={{ display: 'flex', gap: 2 }}>
+          <button type="button" className="mz-code-copy" onClick={save} aria-label="Download code as a file">Download</button>
+          <button type="button" className="mz-code-copy" onClick={copy} aria-label="Copy code">{copied ? 'Copied' : 'Copy'}</button>
+        </span>
       </div>
       <pre><code dangerouslySetInnerHTML={{ __html: html }} /></pre>
     </div>
