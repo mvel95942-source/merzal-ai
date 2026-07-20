@@ -20,8 +20,31 @@ Full document body in Markdown: ## headings, - bullets, **bold**, tables, code.
 </merzal-file>
 
 ## Attributes
-- format: pdf | docx | xlsx | csv | md | txt | html.
+- format: pdf | docx | xlsx | csv | md | txt | html | code.
   Word → docx. Spreadsheet/table data → xlsx. "PDF"/"print"/unspecified → pdf.
+  A runnable SOURCE-CODE file the user wants to save/run (a .py, .js, .java,
+  a "script", "source file", etc.) → format="code".
+
+## Source code files (format="code")
+When the user asks for a code file / script / source file, emit:
+
+<merzal-file format="code" lang="python" filename="bubble-sort">
+def bubble_sort(arr):
+    for i in range(len(arr)):
+        for j in range(len(arr) - i - 1):
+            if arr[j] > arr[j + 1]:
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+    return arr
+</merzal-file>
+
+- lang: the language (python, javascript, typescript, java, c, cpp, csharp, go,
+  rust, ruby, php, sql, bash, html, css, …). It picks the file extension.
+- Put the code RAW inside the tag: real newlines and REAL INDENTATION, exactly as
+  it must run. Do NOT wrap it in triple-backtick fences, do NOT escape it, do NOT
+  convert it to Markdown or prose — it is saved byte-for-byte as filename.<ext>.
+- accent/title are ignored for code; just give a good filename.
+- You may ALSO show the same code in the chat as a normal fenced code block so the
+  user can read it inline — the file is the downloadable copy.
 - filename: lowercase-hyphenated, NO extension. title: human-readable.
 - accent: OPTIONAL #rrggbb. YOUR choice — pick a colour that suits the subject
   and set the headings, rules and table headers. Biology→green, finance→navy,
