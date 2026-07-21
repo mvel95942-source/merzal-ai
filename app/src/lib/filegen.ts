@@ -161,13 +161,13 @@ export function parseFiles(content: string, messageId: string): { files: FileSpe
     if (t) segments.push({ kind: 'text', text: t })
   }
 
-  BLOCK_RE.lastIndex = 0 // the regex is /g and module-scoped: reset before use
-  for (let m = BLOCK_RE.exec(content); m; m = BLOCK_RE.exec(content)) {
-    const a = attrs(m[1])
+  // Build a spec + segment from an attribute string and raw body. Shared by the
+  // normal (closed-tag) path and the unclosed-tag fallback below. Returns false
+  // for an unknown/absent format so the caller can drop it.
+  const addFile = (attrStr: string, rawBody: string): boolean => {
+    const a = attrs(attrStr)
     const format = (a.format || '').toLowerCase() as FileFormat
-    pushText(content.slice(last, m.index))
-    last = m.index + m[0].length
-    if (!FORMATS.includes(format)) continue // unknown format → drop it, keep the prose
+    if (!FORMATS.includes(format)) return false
     const title = (a.title || 'Document').trim()
     // Source code — and a full HTML document the model wrote as an html file —
     // are saved BYTE-FOR-BYTE: no Markdown parsing, no math transcription (which
@@ -175,7 +175,7 @@ export function parseFiles(content: string, messageId: string): { files: FileSpe
     // compiles/renders as written. (Asking for "the HTML file" used to escape
     // every tag and ship source-as-text instead of a page.)
     const isCode = format === 'code'
-    const rawHtml = format === 'html' && looksLikeHtmlDoc(m[2])
+    const rawHtml = format === 'html' && looksLikeHtmlDoc(rawBody)
     const spec: FileSpec = {
       id: `${messageId}:${i++}`,
       format,
@@ -184,15 +184,42 @@ export function parseFiles(content: string, messageId: string): { files: FileSpe
       accent: parseAccent(a.accent),
       lang: isCode ? (a.lang || '').trim().toLowerCase() : undefined,
       content: isCode || rawHtml
-        ? stripCodeFences(m[2])
+        ? stripCodeFences(rawBody)
         // Transcribe math ONCE, here — every writer downstream renders plain text.
         // The target matters: Word/HTML draw with system fonts and can show ₂,
         // but the PDF's embedded font has no subscripts (see latex.ts).
-        : mathForDocument(m[2].trim(), format === 'pdf' ? 'pdf' : 'unicode'),
+        : mathForDocument(rawBody.trim(), format === 'pdf' ? 'pdf' : 'unicode'),
     }
     files.push(spec)
     segments.push({ kind: 'file', spec })
+    return true
   }
+
+  BLOCK_RE.lastIndex = 0 // the regex is /g and module-scoped: reset before use
+  for (let m = BLOCK_RE.exec(content); m; m = BLOCK_RE.exec(content)) {
+    pushText(content.slice(last, m.index))
+    last = m.index + m[0].length
+    addFile(m[1], m[2]) // unknown format → dropped, prose already pushed
+  }
+
+  // Tolerate an UNCLOSED <merzal-file …> in the remaining tail: the model can be
+  // cut off (token limit) before </merzal-file>, which left the raw open tag and
+  // the whole document body dumped into the chat as text. Treat everything from
+  // the open tag to the end as the file body so a truncated generation still
+  // renders a download card instead of leaking markup.
+  const tail = content.slice(last)
+  const openIdx = tail.search(/<merzal-file\b/i)
+  if (openIdx !== -1) {
+    const afterOpen = tail.slice(openIdx + OPEN_TAG.length)
+    const gt = afterOpen.indexOf('>')
+    if (gt !== -1) {
+      const body = afterOpen.slice(gt + 1).replace(/<\/merzal-file>\s*$/i, '')
+      pushText(tail.slice(0, openIdx))
+      addFile(afterOpen.slice(0, gt), body)
+      last = content.length
+    }
+  }
+
   pushText(content.slice(last))
   return { files, segments }
 }

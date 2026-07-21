@@ -95,7 +95,11 @@ export default function App() {
         setProfile(prof)
       }
       setChats(list)
-      setActiveId(openId ?? list[0]?.id ?? null)
+      // Always open into a FRESH chat on app entry (unless a share link asked to
+      // resume a specific one). Leaving activeId null makes ChatViewGate open an
+      // empty new chat — reusing an existing untouched one rather than piling up
+      // blanks (see ensureActive) — so users never land back in the last convo.
+      setActiveId(openId ?? null)
       setPhase('app')
     } catch {
       // Never strand the user on "Loading…": on any unexpected error, fall back
