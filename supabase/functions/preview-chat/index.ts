@@ -1,14 +1,20 @@
 // Merzal AI — anonymous PREVIEW chat (no login). Real answers, capped.
 // Each device gets PREVIEW_LIMIT free messages, tracked in preview_usage.
-// Key is server-side (GEMINI_API_KEY secret; never in the public bundle).
+// Keys are server-side secrets (AICREDITS_API_KEY primary, GEMINI_API_KEY fallback).
 // verify_jwt=false. Mirrors the safety guardrails of the `chat` function.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const PREVIEW_LIMIT = 10
-// Key comes from the GEMINI_API_KEY secret — never hardcoded. (The previous
-// build inlined a live key here; rotate that key and set the secret.)
-const KEY = () => Deno.env.get('GEMINI_API_KEY') || ''
-const MODELS = ['gemma-4-31b-it', 'gemini-2.5-flash', 'gemini-2.0-flash']
+// Providers, tried in order. AICredits (DeepSeek V4 Flash) is PRIMARY — the same
+// engine the signed-in `chat` function uses — so preview no longer depends on the
+// Gemini key. Gemini stays only as a last-resort fallback. All keys are secrets,
+// never hardcoded; AICREDITS_* are shared project secrets already used by `chat`.
+const FALLBACK: Record<string, string> = {
+  AICREDITS_BASE_URL: 'https://aicredits.in/v1',
+  AICREDITS_MODEL: 'deepseek/deepseek-v4-flash',
+  GEMINI_MODELS: 'gemma-4-31b-it,gemini-2.5-flash,gemini-2.0-flash',
+}
+const env = (k: string) => Deno.env.get(k) || FALLBACK[k] || ''
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai'
 
 const CORS = {
@@ -67,23 +73,29 @@ Deno.serve(async (req) => {
   await admin.from('preview_usage').upsert({ device_id: deviceId, count: newCount, ip, updated_at: new Date().toISOString() })
   const remaining = Math.max(0, PREVIEW_LIMIT - newCount)
 
-  // ── Stream a real answer (try each model on 429/5xx) ────────────
-  const payload = (model: string) => ({ model, stream: true, messages: [{ role: 'system', content: systemPrompt(mode, context) }, ...messages.map((m) => ({ role: m.role, content: m.content }))] })
+  // ── Stream a real answer ─────────────────────────────────────────
+  // AICredits (DeepSeek) first, Gemini models as fallback. Each provider is
+  // tried in order; any thrown or non-OK response falls through to the next.
+  const chatMessages = [{ role: 'system', content: systemPrompt(mode, context) }, ...messages.map((m) => ({ role: m.role, content: m.content }))]
+  const attempts: { base: string; key: string; model: string }[] = []
+  if (Deno.env.get('AICREDITS_API_KEY')) attempts.push({ base: env('AICREDITS_BASE_URL'), key: Deno.env.get('AICREDITS_API_KEY')!, model: env('AICREDITS_MODEL') })
+  for (const model of env('GEMINI_MODELS').split(',').map((s) => s.trim()).filter(Boolean)) attempts.push({ base: GEMINI_BASE, key: Deno.env.get('GEMINI_API_KEY') || '', model })
+
   let lastStatus = 0
-  for (const model of MODELS) {
+  for (const a of attempts) {
+    if (!a.key) continue
     let upstream: Response
     try {
-      upstream = await fetch(`${GEMINI_BASE}/chat/completions`, {
+      upstream = await fetch(`${a.base}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY()}` },
-        body: JSON.stringify(payload(model)),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.key}` },
+        body: JSON.stringify({ model: a.model, stream: true, messages: chatMessages }),
       })
-    } catch { continue }
+    } catch { lastStatus = 0; continue }
     if (upstream.ok && upstream.body) {
       return new Response(upstream.body, { headers: { ...CORS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'x-preview-remaining': String(remaining), 'x-preview-limit': String(PREVIEW_LIMIT) } })
     }
     lastStatus = upstream.status
-    if (lastStatus !== 429 && lastStatus < 500) break
   }
   return json({ error: `upstream ${lastStatus}`, remaining }, 502)
 })
