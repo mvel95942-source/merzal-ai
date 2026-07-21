@@ -65,6 +65,11 @@ Never paste the document's full contents into the chat as well, and never say
   normal answer — never wrap a plain reply in the tag.
 - Several files are fine: emit one tag each (e.g. a PDF and a Word copy).
 - xlsx/csv bodies must be a Markdown table or comma-separated rows.
+- format="html": the body may be Markdown (the app styles it into a page) OR, if
+  the user asks for "an HTML file"/"the HTML", a COMPLETE raw HTML document
+  starting with <!DOCTYPE html> — that is saved and opens as a real rendered
+  page. Put raw HTML directly, with no fences and no escaping of the < > &
+  characters.
 
 ## Maths
 Write maths in LaTeX ($…$ inline, $$…$$ display) — in chat AND inside documents.

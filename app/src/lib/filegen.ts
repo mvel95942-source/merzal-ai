@@ -111,6 +111,14 @@ function attrs(raw: string): Record<string, string> {
 // it in a ```lang … ``` fence out of habit. Peel a single wrapping fence if one
 // is present (keeping any fences that are genuinely part of the code untouched),
 // then drop leading/trailing blank lines while preserving inner indentation.
+// True when the body is already a full HTML document (the model wrote real HTML
+// for "give me the html file") rather than the Markdown an html file normally
+// carries. Tolerates a leading ```html fence and whitespace.
+export function looksLikeHtmlDoc(raw: string): boolean {
+  const s = raw.replace(/^\s*```[a-z]*\s*/i, '').trimStart()
+  return /^<(?:!doctype\s+html|html[\s>])/i.test(s)
+}
+
 export function stripCodeFences(raw: string): string {
   let s = raw.replace(/^\r?\n/, '').replace(/\s+$/, '')
   const fence = s.match(/^\s*```[^\n]*\n([\s\S]*?)\n?```\s*$/)
@@ -161,10 +169,13 @@ export function parseFiles(content: string, messageId: string): { files: FileSpe
     last = m.index + m[0].length
     if (!FORMATS.includes(format)) continue // unknown format → drop it, keep the prose
     const title = (a.title || 'Document').trim()
-    // Source code is saved BYTE-FOR-BYTE: no Markdown parsing, no math
-    // transcription (which would corrupt `$`, `\n`, etc. in code), and
-    // indentation preserved exactly so the file compiles/runs as written.
+    // Source code — and a full HTML document the model wrote as an html file —
+    // are saved BYTE-FOR-BYTE: no Markdown parsing, no math transcription (which
+    // would corrupt `$`, `\`, tags), indentation preserved exactly so the file
+    // compiles/renders as written. (Asking for "the HTML file" used to escape
+    // every tag and ship source-as-text instead of a page.)
     const isCode = format === 'code'
+    const rawHtml = format === 'html' && looksLikeHtmlDoc(m[2])
     const spec: FileSpec = {
       id: `${messageId}:${i++}`,
       format,
@@ -172,7 +183,7 @@ export function parseFiles(content: string, messageId: string): { files: FileSpe
       title,
       accent: parseAccent(a.accent),
       lang: isCode ? (a.lang || '').trim().toLowerCase() : undefined,
-      content: isCode
+      content: isCode || rawHtml
         ? stripCodeFences(m[2])
         // Transcribe math ONCE, here — every writer downstream renders plain text.
         // The target matters: Word/HTML draw with system fonts and can show ₂,
@@ -606,6 +617,13 @@ async function buildXlsx(spec: FileSpec): Promise<Blob> {
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 
 function buildHtml(spec: FileSpec): Blob {
+  // The model already wrote a complete HTML document — ship it byte-for-byte so
+  // the browser RENDERS it. Running it through the Markdown pipeline (below)
+  // would escape every tag and download source-as-text instead of a page.
+  if (looksLikeHtmlDoc(spec.content)) {
+    return new Blob([spec.content], { type: MIME.html })
+  }
+
   const html = (rs: Inline[]) => rs.map((r) => {
     const t = esc(r.text)
     if (r.code) return `<code>${t}</code>`
