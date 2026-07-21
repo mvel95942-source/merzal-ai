@@ -5,6 +5,7 @@
 // Falls back to the admin-maintained career-guidance markdown when PageIndex
 // isn't configured. Drops in here with zero chat-UI changes.
 import { api } from './api'
+import { webSearch } from './websearch'
 import type { ChatMode } from './types'
 
 const CACHE_TTL_MS = 30_000
@@ -52,11 +53,31 @@ export interface KnowledgeProvider {
   retrieve(query: string, mode: ChatMode): Promise<string>
 }
 
-// World mode: rely on the model's own knowledge, no external retrieval.
+// Pure chit-chat / greetings don't need a web search — skip those to avoid a
+// pointless round-trip. Everything else in World mode gets live web grounding.
+const CHITCHAT = /^(hi+|hey+|hello+|yo+|hola|vanakkam|thanks?|thank you|thx|ok(ay)?|cool|nice|good (morning|afternoon|evening|night)|how are you|sup|wassup|bye|see ya)\b[\s!.?]*$/i
+
+// World/General mode: ground answers in a live DuckDuckGo web search so the
+// model can answer current/factual questions and cite real sources. Runs
+// through the `web-search` edge function (server-side, no CORS). On any failure
+// or empty result it returns '' and the model answers from its own knowledge.
 export const WorldKnowledgeProvider: KnowledgeProvider = {
   id: 'world',
-  async retrieve() {
-    return ''
+  async retrieve(query) {
+    const q = (query || '').trim()
+    if (q.length < 4 || CHITCHAT.test(q)) return ''
+    const results = await webSearch(q, 5)
+    if (!results.length) return ''
+    const block = results
+      .map((r, i) => `[${i + 1}] ${r.title}\n${r.url}${r.snippet ? `\n${r.snippet}` : ''}`)
+      .join('\n\n')
+    return [
+      'Live web search results (DuckDuckGo) for the user\'s question. Use them to answer with current, accurate information.',
+      'Cite the sources you rely on inline as [1], [2], … and, when the answer draws on them, end with a short "Sources:" list of the URLs used.',
+      'If these results are irrelevant or unhelpful, ignore them and answer from your own knowledge — never mention that a search returned nothing.',
+      '',
+      block,
+    ].join('\n')
   },
 }
 
