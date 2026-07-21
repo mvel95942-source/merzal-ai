@@ -33,10 +33,17 @@ const QKEY = 'merzal_offline_queue_v1'
 type Queued = { chatId: string; text: string; mode: ChatMode }
 
 // Auto-switch signal. In Campus mode the model prefixes an outside-knowledge
-// answer with this exact tag (see systemPrompt / modeRole); the client flips the
-// mode pill to World and strips the tag so it never shows or gets saved.
+// answer with the tag <merzal-switch to="world">; the client flips the mode pill
+// to World and strips the tag so it never shows or gets saved.
 const SWITCH_TAG = '<merzal-switch to="world">'
-const SWITCH_RE = /^﻿?\s*<merzal-switch\s+to="world"\s*\/?>\s*/i
+// Presence of the opening tag → this reply asked to switch to World.
+const SWITCH_DETECT = /<merzal-switch\b[^>]*\bto="world"[^>]*>/i
+// Remove EVERY merzal-switch tag, opening or closing — models sometimes wrap it
+// as an element (`<merzal-switch …></merzal-switch>`), so both must be stripped.
+const SWITCH_ANY = /<\/?merzal-switch\b[^>]*>/gi
+function stripSwitchTags(s: string): string {
+  return s.replace(SWITCH_ANY, '').replace(/^﻿?\s+/, '')
+}
 // True while `raw` is still a possible prefix of the opening tag — used to hold
 // the very first characters back from the typewriter so a partial tag never
 // flashes on screen. Only ever matches at the start of the reply.
@@ -172,15 +179,13 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     let done = false
     let raf = 0
     let switchDecided = false // resolved whether the reply opens with a switch tag
-    // Detect a leading <merzal-switch> tag once enough has arrived to tell, flip
-    // the mode pill to World, and strip the tag from what the reader ever sees.
+    // Detect a leading <merzal-switch> tag once enough has arrived to tell, then
+    // flip the mode pill to World. The tag itself is stripped from every rendered
+    // frame (and the saved text) by stripSwitchTags — so it never shows.
     const resolveSwitch = () => {
       if (switchDecided || maybeSwitchPrefix(raw)) return
       switchDecided = true
-      if (SWITCH_RE.test(raw)) {
-        raw = raw.replace(SWITCH_RE, '')
-        if (onThisChat()) setMode('world')
-      }
+      if (SWITCH_DETECT.test(raw) && onThisChat()) setMode('world')
     }
     const tick = () => {
       if (shown < target.length) {
@@ -224,20 +229,18 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           raw += tok
           resolveSwitch()
           // Hold the opening characters back until we know they aren't a switch
-          // tag, so a partial tag never flashes on screen.
-          target = switchDecided ? raw : ''
+          // tag, so a partial tag never flashes on screen; once decided, strip
+          // any switch tag (opening or closing) from what the reader sees.
+          target = switchDecided ? stripSwitchTags(raw) : ''
         },
       )
-      // Stream finished. Strip the switch tag from the authoritative final text
+      // Stream finished. Strip every switch tag from the authoritative final text
       // (defensive: covers a reply too short for the streaming resolver to fire),
       // flip the mode if we haven't already, then let the typewriter drain to the
       // end before swapping — no premature cut, no end-of-answer snap.
-      let clean = full
-      if (SWITCH_RE.test(clean)) {
-        clean = clean.replace(SWITCH_RE, '')
-        if (!switchDecided && onThisChat()) setMode('world')
-      }
+      if (!switchDecided && SWITCH_DETECT.test(full) && onThisChat()) setMode('world')
       switchDecided = true
+      const clean = stripSwitchTags(full)
       target = clean
       if (!started && clean) { started = true; if (onThisChat()) { setThinking(false); setStreaming(true) } raf = requestAnimationFrame(tick) }
       await new Promise<void>((resolve) => {
