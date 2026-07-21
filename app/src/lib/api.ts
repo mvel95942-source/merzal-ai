@@ -325,9 +325,14 @@ const realApi = {
   async listChats(): Promise<Chat[]> {
     // Embed messages(count) so the client knows which chats are empty without a
     // round-trip per row — used to gate "New chat" (see App.newChat).
+    // Filter by user_id explicitly: RLS already scopes rows to the owner, but a
+    // belt-and-suspenders own_id filter means a future policy regression can
+    // never surface another user's chats in the sidebar.
+    const me = await uid()
     const { data } = await supabase
       .from('chats')
       .select('id,title,bucket,pinned,updated_at,messages(count)')
+      .eq('user_id', me)
       .order('pinned', { ascending: false })
       .order('updated_at', { ascending: false })
     return (data ?? []).map((c) => ({
@@ -495,12 +500,18 @@ const realApi = {
   },
 
   // Public read of a shared conversation by token (no auth required).
+  // Goes through the token-scoped `get_shared_chat` SECURITY DEFINER RPC — the
+  // old direct table reads relied on broad "public read shared" RLS policies
+  // that leaked EVERY shared chat into every signed-in user's list, so those
+  // policies were dropped. The RPC returns ONLY the one conversation whose share
+  // token matches exactly; an unknown token yields null.
   async getSharedChat(token: string): Promise<SharedConversation | null> {
-    const { data: share } = await supabase.from('shared_chats').select('chat_id').eq('token', token).maybeSingle()
-    if (!share) return null
-    const { data: chat } = await supabase.from('chats').select('title').eq('id', share.chat_id).maybeSingle()
-    const { data: msgs } = await supabase.from('messages').select('*').eq('chat_id', share.chat_id).order('created_at', { ascending: true })
-    return { title: chat?.title ?? 'Shared conversation', messages: (msgs ?? []) as Message[] }
+    // Cast: get_shared_chat isn't in the generated DB types (same pattern as the
+    // other admin RPCs below).
+    const { data, error } = await (supabase as any).rpc('get_shared_chat', { p_token: token })
+    if (error || !data) return null
+    const d = data as { title?: string; messages?: Message[] }
+    return { title: d.title ?? 'Shared conversation', messages: (d.messages ?? []) as Message[] }
   },
 
   // Copy a shared conversation into the signed-in user's account so they can
