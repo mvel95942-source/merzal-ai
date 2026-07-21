@@ -18,7 +18,7 @@ type State = 'idle' | 'building' | 'done' | 'error'
 // A hint of the format, so a PDF and a Word doc are told apart at a glance.
 const TINT: Record<string, string> = {
   pdf: '#c0392b', docx: '#2b579a', xlsx: '#1d6f42',
-  csv: '#1d6f42', md: '#5c5449', txt: '#5c5449', html: '#bf5e36',
+  csv: '#1d6f42', md: '#5c5449', txt: '#5c5449', html: '#bf5e36', code: '#6a4ca8',
 }
 
 export function FileCard({ spec }: { spec: FileSpec }) {

@@ -302,8 +302,8 @@ const realApi = {
     return data.session
   },
 
-  onAuthChange(cb: () => void) {
-    return supabase.auth.onAuthStateChange(() => cb())
+  onAuthChange(cb: (event: string) => void) {
+    return supabase.auth.onAuthStateChange((event) => cb(event))
   },
 
   // ── PROFILE ───────────────────────────────────────────────────────
@@ -323,12 +323,21 @@ const realApi = {
 
   // ── CHATS ─────────────────────────────────────────────────────────
   async listChats(): Promise<Chat[]> {
+    // Embed messages(count) so the client knows which chats are empty without a
+    // round-trip per row — used to gate "New chat" (see App.newChat).
     const { data } = await supabase
       .from('chats')
-      .select('id,title,bucket,pinned,updated_at')
+      .select('id,title,bucket,pinned,updated_at,messages(count)')
       .order('pinned', { ascending: false })
       .order('updated_at', { ascending: false })
-    return (data ?? []).map((c) => ({ ...c, title: c.title ?? 'New chat' })) as Chat[]
+    return (data ?? []).map((c) => ({
+      id: c.id,
+      title: c.title ?? 'New chat',
+      bucket: c.bucket,
+      pinned: c.pinned,
+      updated_at: c.updated_at,
+      msgCount: (c.messages as { count: number }[] | null)?.[0]?.count ?? 0,
+    })) as Chat[]
   },
 
   async createChat(title = 'New chat', bucket = 'Today'): Promise<Chat> {
@@ -339,7 +348,8 @@ const realApi = {
       .select('id,title,bucket,pinned,updated_at')
       .single()
     if (error) throw error
-    return { ...data, title: data.title ?? 'New chat' } as Chat
+    // A just-created chat has no messages yet.
+    return { ...data, title: data.title ?? 'New chat', msgCount: 0 } as Chat
   },
 
   async renameChat(chatId: string, title: string) {

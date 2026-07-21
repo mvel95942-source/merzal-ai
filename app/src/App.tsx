@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { api, emailToRoll } from './lib/api'
 import { hasSupabase } from './lib/supabase'
 import { brand } from './lib/brand'
@@ -34,6 +34,7 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(true) // desktop sidebar collapse (mobile-first: hideable)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
+  const [newChatHint, setNewChatHint] = useState(false)
   const [hash, setHash] = useState(typeof window !== 'undefined' ? window.location.hash : '')
   const conn = useConnection()
   const isMobile = useIsMobile()
@@ -44,51 +45,97 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  // Auto-dismiss the "start a conversation first" nudge.
+  useEffect(() => {
+    if (!newChatHint) return
+    const t = setTimeout(() => setNewChatHint(false), 2800)
+    return () => clearTimeout(t)
+  }, [newChatHint])
+
   // Public read-only share route: #/share/<token> — no auth required.
   const shareToken = hash.startsWith('#/share/') ? hash.slice('#/share/'.length) : null
   const adminRoute = hash === '#/admin' || hash.startsWith('#/admin/')
   const feedbackRoute = hash === '#/feedback'
   const analyticsRoute = hash === '#/analytics'
 
+  // Guards against overlapping boots. Supabase fires INITIAL_SESSION on load AND
+  // we call this directly, so two runs used to race (duplicate network, chat
+  // flicker). A monotonic token lets only the newest run commit its results.
+  const bootSeq = useRef(0)
   const loadAfterAuth = useCallback(async () => {
-    const session = await api.getSession()
-    if (!session) { setPhase('login'); return }
-    setAccount(emailToRoll(session.user.email) ?? 'You')
-    const prof = await api.getProfile()
-    if (prof && !prof.onboarding_done) {
-      await api.upsertProfile({ onboarding_done: true })
-      setProfile({ ...prof, onboarding_done: true })
-    } else {
-      setProfile(prof)
+    const seq = ++bootSeq.current
+    const stale = () => seq !== bootSeq.current
+    try {
+      const session = await api.getSession()
+      if (stale()) return
+      if (!session) { setPhase('login'); return }
+      setAccount(emailToRoll(session.user.email) ?? 'You')
+
+      // Continue a conversation opened from a share link (before the chat list).
+      let openId = localStorage.getItem('merzal_open_chat')
+      const contTok = localStorage.getItem('merzal_continue_token')
+      if (contTok) {
+        try { const id = await api.importSharedChat(contTok); if (id) openId = id } catch { /* ignore */ }
+        localStorage.removeItem('merzal_continue_token')
+      }
+      localStorage.removeItem('merzal_open_chat')
+
+      // Profile and chat list are independent — fetch in parallel so the slower
+      // of the two gates boot, not their sum. A failure in either must NOT hang
+      // the app on the loading screen (that was the "refresh many times" bug).
+      const [prof, list] = await Promise.all([
+        api.getProfile().catch(() => null),
+        api.listChats().catch(() => [] as Chat[]),
+      ])
+      if (stale()) return
+      if (prof && !prof.onboarding_done) {
+        api.upsertProfile({ onboarding_done: true }).catch(() => {})
+        setProfile({ ...prof, onboarding_done: true })
+      } else {
+        setProfile(prof)
+      }
+      setChats(list)
+      setActiveId(openId ?? list[0]?.id ?? null)
+      setPhase('app')
+    } catch {
+      // Never strand the user on "Loading…": on any unexpected error, fall back
+      // to the login screen so a retry is one tap away, not a full refresh.
+      if (!stale()) setPhase((p) => (p === 'app' ? p : 'login'))
     }
-    // Continue a conversation opened from a share link.
-    let openId = localStorage.getItem('merzal_open_chat')
-    const contTok = localStorage.getItem('merzal_continue_token')
-    if (contTok) {
-      try { const id = await api.importSharedChat(contTok); if (id) openId = id } catch { /* ignore */ }
-      localStorage.removeItem('merzal_continue_token')
-    }
-    localStorage.removeItem('merzal_open_chat')
-    const list = await api.listChats()
-    setChats(list)
-    setActiveId(openId ?? list[0]?.id ?? null)
-    setPhase('app')
   }, [])
 
   useEffect(() => {
     if (!hasSupabase) { setPhase('login'); return }
     loadAfterAuth()
-    const { data } = api.onAuthChange(() => loadAfterAuth())
+    // Only reload on a real sign-in/out. INITIAL_SESSION duplicates the direct
+    // call above; TOKEN_REFRESHED / USER_UPDATED fire periodically and must NOT
+    // reload — doing so reset the open chat mid-session and re-ran all boot I/O.
+    const { data } = api.onAuthChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') loadAfterAuth()
+    })
     return () => data.subscription.unsubscribe()
   }, [loadAfterAuth])
 
+  // Enforce one conversation per chat: never spawn a second empty chat while one
+  // already exists. If the user clicks "New chat" with an untouched chat around,
+  // we just surface that chat (and nudge them) instead of piling up blank rows.
   async function newChat() {
+    const empty = chats.find((c) => (c.msgCount ?? 0) === 0)
+    if (empty) {
+      setActiveId(empty.id)
+      if (empty.id === activeId) setNewChatHint(true) // already here → they need a reason why nothing changed
+      return
+    }
     const c = await api.createChat()
     setChats((prev) => [c, ...prev])
     setActiveId(c.id)
   }
 
+  // Lazily reuse/create the active chat. Reuses an existing empty chat so we
+  // don't strand the user on a blank chat while another empty one lingers.
   async function ensureActive() {
+    const empty = chats.find((c) => (c.msgCount ?? 0) === 0)
+    if (empty) { setActiveId(empty.id); return empty.id }
     const c = await api.createChat()
     setChats((prev) => [c, ...prev])
     setActiveId(c.id)
@@ -97,7 +144,8 @@ export default function App() {
 
   async function onFirstMessage(chatId: string, title: string) {
     await api.renameChat(chatId, title)
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title } : c)))
+    // First message lands → chat is no longer empty, so "New chat" is unlocked.
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title, msgCount: (c.msgCount ?? 0) + 1 } : c)))
   }
 
   if (shareToken) return <SharedView token={shareToken} />
@@ -199,8 +247,19 @@ export default function App() {
       )}
 
       {shareItem && <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />}
+      {newChatHint && <NewChatHint />}
       {conn === 'offline' && <OfflineToast queued={queued} />}
       <InstallPrompt />
+    </div>
+  )
+}
+
+// Nudge shown when the user hits "New chat" on an already-empty chat: explains
+// why no new chat appeared (one conversation per chat before starting another).
+function NewChatHint() {
+  return (
+    <div style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: 9, background: 'var(--ink)', color: 'var(--paper)', padding: '9px 16px', borderRadius: 999, fontSize: 13, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', animation: 'mz-rise .3s both' }}>
+      Start this chat before opening a new one
     </div>
   )
 }

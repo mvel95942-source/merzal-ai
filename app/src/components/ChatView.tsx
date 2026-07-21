@@ -18,6 +18,7 @@ import type { ShareTarget } from './ShareSheet'
 import { Markdown } from './Markdown'
 import { stripThoughts } from '../lib/format'
 import { isDemo, exitDemo } from '../lib/demo'
+import { cancelSpeech, isSpeechSupported, speak, speakableText } from '../lib/tts'
 import { PREVIEW_LIMIT, previewRemaining } from '../lib/preview'
 import { Camera, Check, FileDoc, Image, Plus, Refresh, ThumbDown, ThumbUp, Warning } from './Icons'
 
@@ -46,9 +47,15 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   const [feedbackFor, setFeedbackFor] = useState<{ m: Message; type: 'up' | 'down' } | null>(null)
   const [shareItem, setShareItem] = useState<ShareTarget | null>(null)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [speakingId, setSpeakingId] = useState<string | null>(null)
   const [previewLeft, setPreviewLeft] = useState(() => (isDemo() ? previewRemaining() : PREVIEW_LIMIT))
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // The chat currently on screen. A reply generates asynchronously, so by the
+  // time it streams/finishes the user may have switched chats. Every generation
+  // captures the chat it belongs to and checks it against this ref before
+  // touching visual state — otherwise chat A's answer paints into chat B.
+  const chatIdRef = useRef<string | null>(chatId)
 
   useEffect(() => {
     if (!isDemo()) return
@@ -57,9 +64,24 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     return () => window.removeEventListener('merzal-preview', on)
   }, [])
 
+  // Stop any read-aloud when this view goes away (navigating off, sign-out).
+  useEffect(() => () => cancelSpeech(), [])
+
   useEffect(() => {
+    chatIdRef.current = chatId
+    // Switching chats: clear any transient streaming UI so a reply still
+    // generating for the PREVIOUS chat can't leak its stream/answer in here.
+    // The generation keeps running and saves to its own chat (see `generate`).
+    setThinking(false)
+    setStreaming(false)
+    setDraft('')
+    setRegeneratingId(null)
+    cancelSpeech()
+    setSpeakingId(null)
     if (!chatId) { setMessages([]); return }
-    api.listMessages(chatId).then(setMessages)
+    // Guard the async result too: a slow fetch for an old chat must not overwrite
+    // the messages of the one now on screen.
+    api.listMessages(chatId).then((msgs) => { if (chatIdRef.current === chatId) setMessages(msgs) })
   }, [chatId])
 
   // Scroll only when a turn starts (user message / thinking) or the final
@@ -87,23 +109,25 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
 
   async function runSend(text: string, m: ChatMode, fromQueue = false, atts: PendingAttachment[] = []) {
     if (!chatId) return
+    const forChat = chatId // the chat this send belongs to; guards async updates
+    const onThisChat = () => chatIdRef.current === forChat
     const ready = atts.filter((a) => a.status === 'ready')
     const marker = atts.length ? atts.map((a) => `Attachment · ${a.name}`).join('   ') + '\n' : ''
     const content = marker + text
     // Render the user's message INSTANTLY (optimistic). Waiting on the DB insert
     // before showing it was the send→appear lag. Persist in the background and
     // swap the temp row for the saved one when it lands.
-    const temp = { id: 'tmp-' + Date.now(), chat_id: chatId, role: 'user' as const, content, mode: m, created_at: new Date().toISOString(), reaction: null } as Message
+    const temp = { id: 'tmp-' + Date.now(), chat_id: forChat, role: 'user' as const, content, mode: m, created_at: new Date().toISOString(), reaction: null } as Message
     const base = messages
     setMessages([...base, temp])
-    if (base.length === 0 && !fromQueue) onFirstMessage(chatId, (text || atts[0]?.name || 'New chat').slice(0, 48))
+    if (base.length === 0 && !fromQueue) onFirstMessage(forChat, (text || atts[0]?.name || 'New chat').slice(0, 48))
     extractMemories(text).catch(() => {})
     // Start generating IMMEDIATELY so the thinking indicator appears the instant
     // the message is sent — do NOT wait on the DB insert (that round-trip was the
     // blank gap before "thinking"). Persist in the background and swap the temp
-    // row for the saved one when it lands.
-    api.addMessage({ chat_id: chatId, role: 'user', content, mode: m })
-      .then((saved) => setMessages((prev) => prev.map((x) => (x.id === temp.id ? saved : x))))
+    // row for the saved one when it lands — but only if still viewing this chat.
+    api.addMessage({ chat_id: forChat, role: 'user', content, mode: m })
+      .then((saved) => { if (onThisChat()) setMessages((prev) => prev.map((x) => (x.id === temp.id ? saved : x))) })
       .catch(() => { /* keep the optimistic message */ })
     await generate([...base, temp], m, ready)
   }
@@ -115,6 +139,11 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
   // becomes a new VERSION of that existing reply (old text kept, arrows appear).
   async function generate(history: Message[], m: ChatMode, atts: PendingAttachment[] = [], replace?: Message) {
     if (!chatId) return
+    // The chat this answer belongs to. If the user navigates away mid-stream,
+    // generation and DB persistence continue for THIS chat, but we stop painting
+    // into whatever chat is now on screen. `onThisChat()` gates every visual set.
+    const forChat = chatId
+    const onThisChat = () => chatIdRef.current === forChat
     setThinking(true)
     setRegeneratingId(replace?.id ?? null)
     setDraft('')
@@ -146,7 +175,10 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           // visible chunks — the chunky proportional catch-up was the jank.
           shown += Math.min(remaining, Math.max(1, Math.min(6, Math.ceil(remaining / 40))))
         }
-        setDraft(target.slice(0, shown))
+        // Only paint if this chat is still on screen; otherwise keep advancing
+        // `shown` silently so the drain promise below still resolves and the
+        // finished answer is saved to `forChat`.
+        if (onThisChat()) setDraft(target.slice(0, shown))
       }
       raf = (!done || shown < target.length) ? requestAnimationFrame(tick) : 0
     }
@@ -163,7 +195,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
           signal: ctrl.signal,
         },
         (tok) => {
-          if (!started) { started = true; setThinking(false); setStreaming(true); raf = requestAnimationFrame(tick) }
+          if (!started) { started = true; if (onThisChat()) { setThinking(false); setStreaming(true) } raf = requestAnimationFrame(tick) }
           target += tok
         },
       )
@@ -171,7 +203,7 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
       // drain to the end before swapping — no premature cut, no end-of-answer
       // snap. (Cancelling the animation right here was the visible glitch.)
       target = full
-      if (!started && full) { started = true; setThinking(false); setStreaming(true); raf = requestAnimationFrame(tick) }
+      if (!started && full) { started = true; if (onThisChat()) { setThinking(false); setStreaming(true) } raf = requestAnimationFrame(tick) }
       await new Promise<void>((resolve) => {
         const check = () => (shown >= target.length ? resolve() : requestAnimationFrame(check))
         check()
@@ -189,30 +221,35 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
         const prevVersions = versionsOf(replace).list
         const variants = [...prevVersions, full]
         const index = variants.length - 1
-        setMessages((prev) => prev.map((x) => (x.id === replace.id ? { ...x, content: full, variants, variant_index: index, reaction: null } : x)))
+        // Persist unconditionally (this belongs to `forChat`); paint only if the
+        // user is still looking at it.
+        if (onThisChat()) setMessages((prev) => prev.map((x) => (x.id === replace.id ? { ...x, content: full, variants, variant_index: index, reaction: null } : x)))
         // The old thumbs-up/down judged the PREVIOUS text, so it can't carry to
         // a freshly generated one. (The rating itself is already preserved in
         // the feedback table alongside the answer it was given for.)
         if (replace.reaction) api.reactMessage(replace.id, null).catch(() => {})
         api.saveVariants(replace.id, variants, index).catch(() => {})
-        api.touchChat(chatId).catch(() => {})
+        api.touchChat(forChat).catch(() => {})
       } else if (full) {
-        const saved = await api.addMessage({ chat_id: chatId, role: 'assistant', content: full, mode: m })
-        setMessages((prev) => [...prev, saved])
-        api.touchChat(chatId).catch(() => {})
+        const saved = await api.addMessage({ chat_id: forChat, role: 'assistant', content: full, mode: m })
+        if (onThisChat()) setMessages((prev) => [...prev, saved])
+        api.touchChat(forChat).catch(() => {})
       }
-      setStreaming(false)
-      setDraft('')
+      if (onThisChat()) { setStreaming(false); setDraft('') }
     } catch {
       // aborted or endpoint error — drop the partial draft. On a regenerate the
       // previous answer is untouched, so it simply reappears.
     } finally {
       done = true
       cancelAnimationFrame(raf)
-      setThinking(false)
-      setStreaming(false)
-      setDraft('')
-      setRegeneratingId(null)
+      // Only tear down visible state if this chat is still on screen — otherwise
+      // we'd wipe the state of whatever chat the user switched to.
+      if (onThisChat()) {
+        setThinking(false)
+        setStreaming(false)
+        setDraft('')
+        setRegeneratingId(null)
+      }
       abortRef.current = null
     }
   }
@@ -308,6 +345,8 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
                   onEditSubmit={(text) => regenerate(m, text)}
                   onRegenerate={() => regenerateAnswer(m)}
                   onVersion={(idx) => switchVersion(m, idx)}
+                  speaking={speakingId === m.id}
+                  onSpeak={() => toggleSpeak(m)}
                 />
               )
             ))}
@@ -349,6 +388,15 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reaction: next } : x)))
     await api.reactMessage(m.id, next)
   }
+
+  // Read a reply aloud (Web Speech). Toggle: speaking the same message stops it.
+  function toggleSpeak(m: Message) {
+    if (speakingId === m.id) { cancelSpeech(); setSpeakingId(null); return }
+    const text = speakableText(m.content)
+    if (!text) return
+    setSpeakingId(m.id)
+    speak(text, () => setSpeakingId((cur) => (cur === m.id ? null : cur)))
+  }
 }
 
 // Assistant streaming/thinking wrapper — no name, no avatar: clean convo style.
@@ -360,7 +408,7 @@ function AssistantWrap({ children }: { children: React.ReactNode }) {
   )
 }
 
-function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEditSubmit, onRegenerate, onVersion }: {
+function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEditSubmit, onRegenerate, onVersion, speaking, onSpeak }: {
   m: Message
   busy: boolean
   canRegenerate: boolean
@@ -370,6 +418,8 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
   onEditSubmit: (text: string) => void
   onRegenerate: () => void
   onVersion: (index: number) => void
+  speaking: boolean
+  onSpeak: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.content)
@@ -404,7 +454,7 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
     return (
       <div className="msg" style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <div style={{ maxWidth: '78%' }}>
-          <div style={{ background: 'var(--user-bubble)', borderRadius: 22, padding: '10px 16px', fontSize: 15.5, lineHeight: 1.5, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+          <div style={{ background: 'var(--user-bubble)', borderRadius: 22, padding: '10px 16px', fontSize: 15.5, lineHeight: 1.5, color: 'var(--ink)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0 }}>{m.content}</div>
           <div className="msg-actions" style={{ display: 'flex', gap: 2, marginTop: 6, justifyContent: 'flex-end' }}>
             <button className="act-btn" disabled={busy} onClick={() => { setDraft(m.content); setEditing(true) }}>Edit</button>
             <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
@@ -439,6 +489,13 @@ function MessageRow({ m, busy, canRegenerate, onReact, onFeedback, onShare, onEd
           <button className={'act-btn' + (m.reaction === 'down' ? ' on' : '')} title="Bad response" onClick={() => (m.reaction === 'down' ? onReact('down') : onFeedback('down'))}><ThumbDown size={15} /></button>
           <button className="act-btn" onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
           <button className="act-btn" onClick={onShare}>Share</button>
+          {isSpeechSupported() && (
+            <button className={'act-btn' + (speaking ? ' on' : '')} title={speaking ? 'Stop' : 'Read aloud'} aria-label={speaking ? 'Stop reading' : 'Read aloud'} onClick={onSpeak}>
+              {speaking
+                ? <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></svg>}
+            </button>
+          )}
           {canRegenerate && (
             <button
               className="act-btn"

@@ -16,7 +16,7 @@ import LiberationBold from '../assets/fonts/LiberationSans-Bold.ttf?url'
 import LiberationItalic from '../assets/fonts/LiberationSans-Italic.ttf?url'
 import LiberationBoldItalic from '../assets/fonts/LiberationSans-BoldItalic.ttf?url'
 
-export type FileFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'md' | 'txt' | 'html'
+export type FileFormat = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'md' | 'txt' | 'html' | 'code'
 
 export interface FileSpec {
   /** Stable within a message: `${messageId}:${index}`. */
@@ -29,6 +29,12 @@ export interface FileSpec {
   accent: RGB
   /** Markdown body of the document, math already transcribed to Unicode. */
   content: string
+  /**
+   * For `format: 'code'` only — the source language (e.g. "python"). Picks the
+   * file extension and is preserved so the file downloads as real, runnable
+   * source with its indentation untouched.
+   */
+  lang?: string
 }
 
 /** A generated document carries no app branding — it is the user's document. */
@@ -57,8 +63,8 @@ const toHex = (c: RGB) => c.map((v) => v.toString(16).padStart(2, '0')).join('')
 const tint = (c: RGB, amount = 0.88): RGB =>
   c.map((v) => Math.round(v + (255 - v) * amount)) as RGB
 
-const FORMATS: FileFormat[] = ['pdf', 'docx', 'xlsx', 'csv', 'md', 'txt', 'html']
-const EXT: Record<FileFormat, string> = { pdf: 'pdf', docx: 'docx', xlsx: 'xlsx', csv: 'csv', md: 'md', txt: 'txt', html: 'html' }
+const FORMATS: FileFormat[] = ['pdf', 'docx', 'xlsx', 'csv', 'md', 'txt', 'html', 'code']
+const EXT: Record<FileFormat, string> = { pdf: 'pdf', docx: 'docx', xlsx: 'xlsx', csv: 'csv', md: 'md', txt: 'txt', html: 'html', code: 'txt' }
 export const MIME: Record<FileFormat, string> = {
   pdf: 'application/pdf',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -67,10 +73,28 @@ export const MIME: Record<FileFormat, string> = {
   md: 'text/markdown;charset=utf-8',
   txt: 'text/plain;charset=utf-8',
   html: 'text/html;charset=utf-8',
+  code: 'text/plain;charset=utf-8',
 }
 export const LABEL: Record<FileFormat, string> = {
   pdf: 'PDF document', docx: 'Word document', xlsx: 'Excel spreadsheet',
-  csv: 'CSV file', md: 'Markdown file', txt: 'Text file', html: 'Web page',
+  csv: 'CSV file', md: 'Markdown file', txt: 'Text file', html: 'Web page', code: 'Source file',
+}
+
+// Language → file extension for `format: 'code'`. Accepts common names and
+// aliases the model might emit; unknown languages fall back to `.txt`.
+const LANG_EXT: Record<string, string> = {
+  python: 'py', py: 'py', javascript: 'js', js: 'js', node: 'js',
+  typescript: 'ts', ts: 'ts', tsx: 'tsx', jsx: 'jsx', react: 'jsx',
+  java: 'java', kotlin: 'kt', kt: 'kt', swift: 'swift',
+  c: 'c', 'c++': 'cpp', cpp: 'cpp', cxx: 'cpp', 'c#': 'cs', csharp: 'cs', cs: 'cs',
+  go: 'go', golang: 'go', rust: 'rs', rs: 'rs', ruby: 'rb', rb: 'rb',
+  php: 'php', perl: 'pl', lua: 'lua', r: 'r', dart: 'dart', scala: 'scala',
+  sql: 'sql', bash: 'sh', shell: 'sh', sh: 'sh', zsh: 'sh', powershell: 'ps1', ps1: 'ps1', bat: 'bat',
+  html: 'html', css: 'css', scss: 'scss', json: 'json', yaml: 'yml', yml: 'yml', xml: 'xml',
+  markdown: 'md', md: 'md', text: 'txt', txt: 'txt', dockerfile: 'dockerfile', makefile: 'mk',
+}
+export function codeExt(lang: string | undefined): string {
+  return LANG_EXT[(lang || '').trim().toLowerCase()] || 'txt'
 }
 
 // ── Parsing ────────────────────────────────────────────────────────────
@@ -81,6 +105,18 @@ function attrs(raw: string): Record<string, string> {
   const out: Record<string, string> = {}
   for (const m of raw.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) out[m[1]] = m[2]
   return out
+}
+
+// The model is told to put RAW code in a code file, but it sometimes still wraps
+// it in a ```lang … ``` fence out of habit. Peel a single wrapping fence if one
+// is present (keeping any fences that are genuinely part of the code untouched),
+// then drop leading/trailing blank lines while preserving inner indentation.
+export function stripCodeFences(raw: string): string {
+  let s = raw.replace(/^\r?\n/, '').replace(/\s+$/, '')
+  const fence = s.match(/^\s*```[^\n]*\n([\s\S]*?)\n?```\s*$/)
+  if (fence) s = fence[1]
+  // Trim blank lines at the very top/bottom only — never touch inner whitespace.
+  return s.replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, '')
 }
 
 export function slug(s: string, fallback = 'document'): string {
@@ -125,16 +161,23 @@ export function parseFiles(content: string, messageId: string): { files: FileSpe
     last = m.index + m[0].length
     if (!FORMATS.includes(format)) continue // unknown format → drop it, keep the prose
     const title = (a.title || 'Document').trim()
+    // Source code is saved BYTE-FOR-BYTE: no Markdown parsing, no math
+    // transcription (which would corrupt `$`, `\n`, etc. in code), and
+    // indentation preserved exactly so the file compiles/runs as written.
+    const isCode = format === 'code'
     const spec: FileSpec = {
       id: `${messageId}:${i++}`,
       format,
-      filename: slug(a.filename || title),
+      filename: slug(a.filename || a.lang || title),
       title,
       accent: parseAccent(a.accent),
-      // Transcribe math ONCE, here — every writer downstream renders plain text.
-      // The target matters: Word/HTML draw with system fonts and can show ₂,
-      // but the PDF's embedded font has no subscripts (see latex.ts).
-      content: mathForDocument(m[2].trim(), format === 'pdf' ? 'pdf' : 'unicode'),
+      lang: isCode ? (a.lang || '').trim().toLowerCase() : undefined,
+      content: isCode
+        ? stripCodeFences(m[2])
+        // Transcribe math ONCE, here — every writer downstream renders plain text.
+        // The target matters: Word/HTML draw with system fonts and can show ₂,
+        // but the PDF's embedded font has no subscripts (see latex.ts).
+        : mathForDocument(m[2].trim(), format === 'pdf' ? 'pdf' : 'unicode'),
     }
     files.push(spec)
     segments.push({ kind: 'file', spec })
@@ -178,7 +221,8 @@ export function stripStreamingFiles(content: string): { text: string; writing: b
 }
 
 export function fullName(spec: FileSpec): string {
-  return `${spec.filename}.${EXT[spec.format]}`
+  const ext = spec.format === 'code' ? codeExt(spec.lang) : EXT[spec.format]
+  return `${spec.filename}.${ext}`
 }
 
 // ── Markdown → blocks ──────────────────────────────────────────────────
@@ -638,6 +682,9 @@ export async function buildFile(spec: FileSpec): Promise<Blob> {
     case 'html': return buildHtml(spec)
     case 'txt': return buildTxt(spec)
     case 'md': return new Blob([`# ${spec.title}\n\n${spec.content}\n`], { type: MIME.md })
+    // Source code: exact bytes, indentation intact, ending in a single newline
+    // (POSIX-friendly). No Markdown pass — this is what makes the file run.
+    case 'code': return new Blob([spec.content.endsWith('\n') ? spec.content : spec.content + '\n'], { type: MIME.code })
   }
 }
 

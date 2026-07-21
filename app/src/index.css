@@ -32,11 +32,42 @@
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-/* ───────────────── Dark theme (auto) ─────────────────
-   Matches ChatGPT mobile dark: near-black canvas, subtle
-   gray user bubble, dark gray composer pill. */
+/* ───────────────── Dark theme ─────────────────
+   Matches ChatGPT mobile dark: near-black canvas, subtle gray user bubble,
+   dark gray composer pill. Applied in two cases (see lib/theme.ts):
+     • forced dark:  :root[data-theme="dark"]  (user picked Dark)
+     • system dark:  no data-theme attribute + OS prefers dark
+   The var block is shared via the selector list below. Picking Light stamps
+   data-theme="light", which excludes the media rule so it stays light. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #212121;
+  --paper-panel: #212121;
+  --paper-app: #171717;
+  --surface: #2f2f2f;
+  --surface-soft: #2a2a2a;
+  --user-bubble: #303030;
+  --composer-bg: #303030;
+  --composer-border: transparent;
+  --ink: #ececec;
+  --ink-soft: #d4d4d4;
+  --muted: #9b9b9b;
+  --faint: #8e8ea0;
+  --line: #2d2d2d;
+  --line-strong: #424242;
+  --accent: #10a37f;
+  --accent-soft: #143d34;
+  --danger: #ef4444;
+  --code-bg: #1e1e1e;
+  --code-ink: #ececec;
+  --pre-bg: #0e0e0e;
+  --pre-ink: #ececec;
+  --scroll-thumb: #4a4a4a;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 14px 30px -8px rgba(0, 0, 0, 0.6);
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
     color-scheme: dark;
     --paper: #212121;
     --paper-panel: #212121;
@@ -135,6 +166,26 @@ button { cursor: pointer; background: none; }
 .md th, .md td { border: 1px solid var(--line-strong); padding: 6px 10px; text-align: left; }
 .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; margin: 10px 0; }
 .md hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+
+/* Code editor–style block: header (language + Copy) over a dark terminal surface.
+   The surface is dark in BOTH app themes (--pre-bg), so token colours below are a
+   single fixed palette tuned for a dark background. */
+.mz-code { margin: 0 0 14px; border-radius: 12px; overflow: hidden; background: var(--pre-bg); border: 1px solid var(--line-strong); }
+.mz-code-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px 6px 14px; background: rgba(255, 255, 255, 0.04); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.mz-code-lang { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .02em; color: #9aa4b2; text-transform: lowercase; }
+.mz-code-copy { font-size: 11.5px; color: #9aa4b2; border: none; background: transparent; padding: 3px 8px; border-radius: 6px; transition: background .12s, color .12s; }
+.mz-code-copy:hover { background: rgba(255, 255, 255, 0.08); color: #ececec; }
+/* The inner <pre> lives inside .mz-code, which already rounds/spaces it. */
+.mz-code pre { margin: 0; border-radius: 0; background: transparent; }
+.md .mz-code pre { margin: 0; }
+
+/* Syntax token palette (fixed, tuned for the dark code surface). */
+.md pre code .tok-comment { color: #7c8a9a; font-style: italic; }
+.md pre code .tok-keyword { color: #569cd6; }
+.md pre code .tok-string  { color: #ce9178; }
+.md pre code .tok-number  { color: #b5cea8; }
+.md pre code .tok-const   { color: #56b6c2; }
+.md pre code .tok-fn      { color: #dcdcaa; }
 
 /* Mobile login: show the product story first, then the sign-in form. */
 @media (max-width: 760px) {

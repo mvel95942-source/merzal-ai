@@ -14,8 +14,10 @@ export interface PendingAttachment extends Attachment {
   note?: string
 }
 
-const IMAGE_MIME = /^image\/(png|jpe?g|webp|gif)$/i
-const TEXT_EXT = /\.(txt|csv|tsv|md|markdown|json|log|ya?ml|xml|html?|js|ts|tsx|jsx|py|java|c|cpp|cs|go|rs|rb|php|sql|sh)$/i
+const IMAGE_MIME = /^image\/(png|jpe?g|webp|gif|bmp|svg\+xml|heic|heif)$/i
+// Anything text-extractable is read as text and sent to the model. Kept broad so
+// students can upload code, config, and data files of any common language.
+const TEXT_EXT = /\.(txt|text|csv|tsv|md|markdown|rst|json|jsonc|log|ya?ml|xml|html?|css|scss|sass|less|ini|toml|conf|cfg|env|properties|gradle|makefile|dockerfile|js|mjs|cjs|ts|tsx|jsx|py|pyw|java|kt|kts|swift|c|h|cpp|cc|cxx|hpp|cs|go|rs|rb|php|pl|lua|r|m|scala|dart|sql|sh|bash|zsh|ps1|bat|vue|svelte|tex)$/i
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'a' + Math.random().toString(36).slice(2))
 
@@ -89,13 +91,41 @@ export async function readFile(file: File): Promise<PendingAttachment> {
       return { ...base, kind: 'text', text: '', status: 'unsupported', note: `Couldn't read ${file.name}. Try uploading it as an image, or paste the text.` }
     }
   }
-  return { ...base, kind: 'text', text: '', status: 'unsupported', note: `Unsupported file type: ${file.name}. Supported: images, PDF, Word (.docx), Excel (.xlsx), and text files.` }
+  // Last resort: many "unknown" files (odd MIME, no extension) are really UTF-8
+  // text — try to read them as text before giving up, so uploads rarely fail.
+  try {
+    const text = await readAsText(file)
+    // Heuristic: real text has few NUL/replacement chars. Binary read-as-text is
+    // full of them — reject those so we don't feed the model garbage.
+    // eslint-disable-next-line no-control-regex
+    const bad = (text.match(/[\u0000\uFFFD]/g) || []).length
+    if (text && bad / text.length < 0.02) {
+      return { ...base, kind: 'text', text, status: 'ready' }
+    }
+  } catch { /* fall through to the unsupported note */ }
+  return { ...base, kind: 'text', text: '', status: 'unsupported', note: `Couldn't read ${file.name} as text. Supported: images, PDF, Word (.docx), Excel (.xlsx/.xls), and text/code/data files. For .ppt/.pptx or legacy .doc, export to PDF and upload that.` }
 }
 
 export async function readFiles(files: FileList | File[]): Promise<PendingAttachment[]> {
   return Promise.all(Array.from(files).map(readFile))
 }
 
-// File picker accept lists.
-export const ACCEPT_DOCS = '.txt,.csv,.tsv,.md,.json,.log,.yaml,.yml,.xml,.pdf,.docx,.xls,.xlsx,text/*'
-export const ACCEPT_IMAGES = 'image/png,image/jpeg,image/webp,image/gif'
+// File picker accept lists. We list BOTH extensions and MIME types: some
+// platforms (notably mobile) filter by MIME and hide extension-only entries,
+// which is why Excel/Word files could seem "un-selectable" before. Text/code
+// files fall under `text/*` plus explicit extensions for the ones the OS
+// mislabels (e.g. .py reported as application/octet-stream).
+export const ACCEPT_DOCS = [
+  // Documents with real extractors
+  '.pdf,.docx,.xls,.xlsx',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  // Text / data / config
+  '.txt,.text,.csv,.tsv,.md,.markdown,.rst,.json,.jsonc,.log,.yaml,.yml,.xml,.ini,.toml,.conf,.cfg,.env',
+  'text/*,application/json',
+  // Code (broad set so students can upload source of any common language)
+  '.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.pyw,.java,.kt,.swift,.c,.h,.cpp,.cc,.hpp,.cs,.go,.rs,.rb,.php,.lua,.r,.dart,.scala,.sql,.sh,.bash,.ps1,.bat,.html,.htm,.css,.scss,.vue,.svelte',
+].join(',')
+export const ACCEPT_IMAGES = 'image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,.heif'

@@ -139,9 +139,11 @@ export const demoApi = {
   },
 
   listChats: async (): Promise<Chat[]> =>
-    read<Chat[]>(CHATS, []).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at.localeCompare(a.updated_at)),
+    read<Chat[]>(CHATS, [])
+      .map((c) => ({ ...c, msgCount: read<Message[]>(MSGS(c.id), []).length }))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at.localeCompare(a.updated_at)),
   createChat: async (title = 'New chat', bucket = 'Today'): Promise<Chat> => {
-    const c: Chat = { id: uuid(), title, bucket, pinned: false, updated_at: now() }
+    const c: Chat = { id: uuid(), title, bucket, pinned: false, updated_at: now(), msgCount: 0 }
     write(CHATS, [c, ...read<Chat[]>(CHATS, [])])
     return c
   },

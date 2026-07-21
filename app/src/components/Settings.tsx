@@ -5,6 +5,8 @@ import type { FeedbackType, MemoryItem, Profile } from '../lib/types'
 import { isAdmin, isSuperAdmin } from '../lib/types'
 import { FeedbackForm } from './FeedbackForm'
 import { BarChart, Inbox, Pencil, Wrench } from './Icons'
+import { ACCENTS, getAccentId, getThemeMode, setAccent, setThemeMode } from '../lib/theme'
+import type { ThemeMode } from '../lib/theme'
 
 export function Settings({ profile, onClose, onSignOut }: {
   profile: Profile | null
@@ -40,6 +42,10 @@ export function Settings({ profile, onClose, onSignOut }: {
           <h2 className="display" style={{ fontSize: 24, fontWeight: 500, margin: 0 }}>Settings</h2>
           <button onClick={onClose} style={{ border: 'none', background: 'transparent', fontSize: 22, color: 'var(--muted)' }}>×</button>
         </div>
+
+        <Section title="Appearance" subtitle="Pick a theme and highlight colour. Saved on this device.">
+          <Appearance />
+        </Section>
 
         <Section title="Memory" subtitle="Durable facts Merzal remembers about you. Edit or clear anytime — stored privately, on campus.">
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -79,6 +85,52 @@ export function Settings({ profile, onClose, onSignOut }: {
           }}
         />
       )}
+    </div>
+  )
+}
+
+// Theme (light/dark/system) + accent-colour picker. Applies instantly and
+// persists via lib/theme; local state just drives the selected styling.
+function Appearance() {
+  const [mode, setMode] = useState<ThemeMode>(getThemeMode())
+  const [accent, setAccentState] = useState<string>(getAccentId())
+  const MODES: { id: ThemeMode; label: string }[] = [
+    { id: 'system', label: 'System' },
+    { id: 'light', label: 'Light' },
+    { id: 'dark', label: 'Dark' },
+  ]
+  return (
+    <div>
+      <div role="group" aria-label="Theme" style={{ display: 'flex', gap: 6, background: 'var(--surface-soft)', padding: 4, borderRadius: 12, marginBottom: 16 }}>
+        {MODES.map((m) => {
+          const on = mode === m.id
+          return (
+            <button
+              key={m.id}
+              onClick={() => { setMode(m.id); setThemeMode(m.id) }}
+              aria-pressed={on}
+              style={{ flex: 1, height: 36, border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, background: on ? 'var(--paper-panel)' : 'transparent', color: on ? 'var(--ink)' : 'var(--muted)', boxShadow: on ? 'var(--shadow-pop)' : 'none' }}
+            >
+              {m.label}
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {ACCENTS.map((a) => {
+          const on = accent === a.id
+          return (
+            <button
+              key={a.id}
+              onClick={() => { setAccentState(a.id); setAccent(a.id) }}
+              title={a.label}
+              aria-label={`${a.label} accent`}
+              aria-pressed={on}
+              style={{ width: 30, height: 30, borderRadius: '50%', background: a.color, border: on ? '2px solid var(--ink)' : '2px solid transparent', outline: on ? '2px solid var(--paper-panel)' : 'none', outlineOffset: -4, cursor: 'pointer' }}
+            />
+          )
+        })}
+      </div>
     </div>
   )
 }

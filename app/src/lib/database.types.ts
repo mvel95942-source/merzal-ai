@@ -46,7 +46,15 @@ export type Database = {
         Row: { chat_id: string; content: string; created_at: string; id: string; mode: string | null; reaction: string | null; role: string; user_id: string; variants: Json | null; variant_index: number | null }
         Insert: { chat_id: string; content: string; created_at?: string; id?: string; mode?: string | null; reaction?: string | null; role: string; user_id: string; variants?: Json | null; variant_index?: number | null }
         Update: { chat_id?: string; content?: string; created_at?: string; id?: string; mode?: string | null; reaction?: string | null; role?: string; user_id?: string; variants?: Json | null; variant_index?: number | null }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shared_chats: {
         Row: { chat_id: string; created_at: string; token: string; user_id: string }
