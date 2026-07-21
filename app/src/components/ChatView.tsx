@@ -669,6 +669,15 @@ function Composer(p: {
             value={p.input}
             onChange={(e) => p.setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); p.onSend() } }}
+            onPaste={(e) => {
+              // Paste an image straight from the clipboard (screenshot, copied
+              // image) as an attachment — like pasting into Claude/ChatGPT.
+              const files = Array.from(e.clipboardData?.items ?? [])
+                .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+                .map((it) => it.getAsFile())
+                .filter((f): f is File => !!f)
+              if (files.length) { e.preventDefault(); p.onFiles(files) }
+            }}
             placeholder={p.blocked ? 'Sign in to keep chatting…' : p.conn === 'offline' ? brand.inputPlaceholderOffline : brand.inputPlaceholder}
             rows={1}
             disabled={p.blocked}

@@ -43,7 +43,7 @@ export function SharedView({ token }: { token: string }) {
               {data.messages.map((m) =>
                 m.role === 'user' ? (
                   <div key={m.id} style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <div style={{ maxWidth: '80%', background: '#fff', border: '1px solid var(--line-strong)', borderRadius: '16px 16px 4px 16px', padding: '11px 15px', fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                    <div style={{ maxWidth: '80%', background: 'var(--user-bubble)', color: 'var(--ink)', border: '1px solid var(--line-strong)', borderRadius: '16px 16px 4px 16px', padding: '11px 15px', fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{m.content}</div>
                   </div>
                 ) : (
                   <div key={m.id}><Markdown text={stripThoughts(m.content)} /></div>

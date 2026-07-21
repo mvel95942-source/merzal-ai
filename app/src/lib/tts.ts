@@ -25,14 +25,47 @@ export function speakableText(md: string): string {
 
 let activeUtterance: SpeechSynthesisUtterance | null = null
 
+// Preferred voices, best first. The platform default is often a flat, harsh
+// robotic voice; these are the natural/neural voices modern OSes ship, which
+// sound warm and pleasant. We match by substring, English-only, first hit wins.
+const PREFERRED = [
+  'natural', 'neural', 'google us english', 'google uk english female',
+  'samantha', 'aria', 'jenny', 'sonia', 'libby', 'zira', 'neerja', 'heera',
+  'google', 'female',
+]
+
+// Voices load asynchronously; cache and refresh on voiceschanged so the first
+// read isn't empty. Returns the nicest English voice available, or null.
+let voiceCache: SpeechSynthesisVoice[] = []
+function refreshVoices() { try { voiceCache = window.speechSynthesis.getVoices() } catch { voiceCache = [] } }
+if (isSpeechSupported()) {
+  refreshVoices()
+  window.speechSynthesis.onvoiceschanged = refreshVoices
+}
+function pickVoice(): SpeechSynthesisVoice | null {
+  if (!voiceCache.length) refreshVoices()
+  const en = voiceCache.filter((v) => /^en(-|$)/i.test(v.lang))
+  const pool = en.length ? en : voiceCache
+  for (const want of PREFERRED) {
+    const hit = pool.find((v) => v.name.toLowerCase().includes(want))
+    if (hit) return hit
+  }
+  return pool[0] ?? null
+}
+
 // Speak `text`; `onEnd` fires when it finishes OR is cancelled, so the caller
 // can clear its "speaking" state. Cancels any prior utterance first.
 export function speak(text: string, onEnd: () => void) {
   if (!isSpeechSupported() || !text) { onEnd(); return }
   window.speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(text)
-  u.rate = 1
-  u.pitch = 1
+  const voice = pickVoice()
+  if (voice) u.voice = voice
+  // Slightly slower and a touch higher than the default for a softer, calmer,
+  // less "harsh/bold" read.
+  u.rate = 0.95
+  u.pitch = 1.05
+  u.volume = 1
   u.onend = () => { if (activeUtterance === u) activeUtterance = null; onEnd() }
   u.onerror = () => { if (activeUtterance === u) activeUtterance = null; onEnd() }
   activeUtterance = u
