@@ -1,7 +1,8 @@
 // LLM gateway client. Calls the Supabase Edge Function `chat`, which holds all
 // provider API keys server-side (keys never reach the browser) and proxies an
 // OpenAI-style SSE stream back. In preview mode it calls Gemini/Gemma directly
-// from the browser. Falls back to a built-in stub so the chat UX always works.
+// from the browser. On a genuine outage it shows a friendly retry note (never a
+// dev stub or fabricated answer), so the chat UX degrades gracefully.
 import { supabase, hasSupabase } from './supabase'
 import { isDemo } from './demo'
 import { deviceId, previewRemaining, setPreviewRemaining } from './preview'
@@ -135,6 +136,11 @@ export interface LLMRequest {
 
 const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`
 
+// Shown to a real (signed-in) user when the assistant genuinely can't be
+// reached, in place of the dev stub — which used to leak "set VITE_GEMINI_API_KEY
+// in .env.local" onto students' screens on any transient edge-function failure.
+const UNAVAILABLE = "I couldn't reach the assistant just now — please try again in a moment. 🙂"
+
 // Compose the API message array, folding attachments into the last user turn
 // (images as image_url parts, text files appended as context).
 function buildMessages(req: LLMRequest, system: string, vision = true): unknown[] {
@@ -210,7 +216,7 @@ async function streamAiGateway(req: LLMRequest, onToken: (t: string) => void, mo
 }
 
 async function streamGeminiDirect(req: LLMRequest, onToken: (t: string) => void, models: string[] = GEMINI_MODELS): Promise<string> {
-  if (!GEMINI_KEY) return stub(req, onToken)
+  if (!GEMINI_KEY) return note(req, onToken, UNAVAILABLE)
   const system =
     MERZAL_PERSONA + modeRole(req.mode) +
     ' Use the conversation so far to stay consistent and remember what the user told you (their name, what they study, preferences).' +
@@ -346,11 +352,15 @@ export async function streamChat(req0: LLMRequest, onToken: (t: string) => void)
   }
   // Preview (no login), no local key: capped anonymous gateway with real answers.
   if (isDemo()) return streamPreview(req, onToken)
-  if (!hasSupabase) return stub(req, onToken)
-  try {
+  if (!hasSupabase) return note(req, onToken, UNAVAILABLE)
+  // Signed-in: stream from the `chat` edge function. A transient failure (a brief
+  // 502 while providers fail over, a redeploy, a flaky network) previously fell
+  // straight to the dev stub, showing real students the "set VITE_GEMINI_API_KEY"
+  // message. Retry once, then show a friendly note — never the dev stub.
+  const callEdge = async (): Promise<Response> => {
     const { data } = await supabase.auth.getSession()
     const token = data.session?.access_token
-    const res = await fetch(FUNCTION_URL, {
+    return fetch(FUNCTION_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -365,13 +375,21 @@ export async function streamChat(req0: LLMRequest, onToken: (t: string) => void)
       }),
       signal: req.signal,
     })
-    if (res.status === 501) return stub(req, onToken)
-    if (!res.ok || !res.body) throw new Error(`gateway ${res.status}`)
-    return streamOpenAISSE(res, onToken)
-  } catch (e) {
-    if (req.signal?.aborted) throw e
-    return stub(req, onToken)
   }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (req.signal?.aborted) throw new Error('aborted')
+    try {
+      const res = await callEdge()
+      if (res.status === 501) return note(req, onToken, UNAVAILABLE) // backend not configured
+      if (res.ok && res.body) return streamOpenAISSE(res, onToken)
+      // non-OK (e.g. 502 all providers failed) → brief pause, then one retry.
+    } catch (e) {
+      if (req.signal?.aborted) throw e
+      // network error → fall through to retry
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 700))
+  }
+  return note(req, onToken, UNAVAILABLE)
 }
 
 // Stream a short notice (rate-limit / error fallbacks) word-by-word.
@@ -385,25 +403,3 @@ async function note(req: LLMRequest, onToken: (t: string) => void, msg: string):
   return full
 }
 
-// ── Built-in stub (no backend needed) ────────────────────────────────
-async function stub(req: LLMRequest, onToken: (t: string) => void): Promise<string> {
-  const last = req.messages[req.messages.length - 1]?.content ?? ''
-  const reply = canned(last, req.mode)
-  let full = ''
-  for (const w of reply.split(/(\s+)/)) {
-    if (req.signal?.aborted) break
-    full += w
-    onToken(w)
-    await new Promise((r) => setTimeout(r, 16 + Math.min(60, w.length * 6)))
-  }
-  return full
-}
-
-function canned(q: string, mode: ChatMode): string {
-  const l = q.toLowerCase()
-  if (mode === 'campus' && /add\/?drop|deadline/.test(l))
-    return 'Add/drop for the spring term closes on Friday, January 31 at 11:59 PM. After that, dropping a course leaves a “W” on your transcript.'
-  if (/financial aid|fafsa|scholarship/.test(l))
-    return "To apply for financial aid, submit the FAFSA (or your institution's aid form) through the financial aid portal — priority deadlines are usually early spring."
-  return `This is a local preview reply — set VITE_GEMINI_API_KEY in .env.local to stream real answers. You asked: “${q.trim()}”.`
-}
