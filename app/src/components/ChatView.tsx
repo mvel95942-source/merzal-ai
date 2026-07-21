@@ -32,6 +32,19 @@ interface Props {
 const QKEY = 'merzal_offline_queue_v1'
 type Queued = { chatId: string; text: string; mode: ChatMode }
 
+// Auto-switch signal. In Campus mode the model prefixes an outside-knowledge
+// answer with this exact tag (see systemPrompt / modeRole); the client flips the
+// mode pill to World and strips the tag so it never shows or gets saved.
+const SWITCH_TAG = '<merzal-switch to="world">'
+const SWITCH_RE = /^﻿?\s*<merzal-switch\s+to="world"\s*\/?>\s*/i
+// True while `raw` is still a possible prefix of the opening tag — used to hold
+// the very first characters back from the typewriter so a partial tag never
+// flashes on screen. Only ever matches at the start of the reply.
+function maybeSwitchPrefix(raw: string): boolean {
+  const head = raw.replace(/^﻿?\s*/, '')
+  return head.length > 0 && head.length < SWITCH_TAG.length && SWITCH_TAG.startsWith(head)
+}
+
 function readQueue(): Queued[] { try { return JSON.parse(localStorage.getItem(QKEY) || '[]') } catch { return [] } }
 function writeQueue(q: Queued[]) { localStorage.setItem(QKEY, JSON.stringify(q)) }
 
@@ -153,10 +166,22 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
     // them one character at a time per animation frame, only speeding up when we
     // fall far behind so the caret keeps pace with a fast stream (no chunky jumps).
     let started = false
-    let target = ''   // full text received so far
+    let raw = ''      // every character received, unmodified
+    let target = ''   // text revealed to the typewriter (switch tag stripped)
     let shown = 0     // characters revealed on screen
     let done = false
     let raf = 0
+    let switchDecided = false // resolved whether the reply opens with a switch tag
+    // Detect a leading <merzal-switch> tag once enough has arrived to tell, flip
+    // the mode pill to World, and strip the tag from what the reader ever sees.
+    const resolveSwitch = () => {
+      if (switchDecided || maybeSwitchPrefix(raw)) return
+      switchDecided = true
+      if (SWITCH_RE.test(raw)) {
+        raw = raw.replace(SWITCH_RE, '')
+        if (onThisChat()) setMode('world')
+      }
+    }
     const tick = () => {
       if (shown < target.length) {
         // Everything from a <merzal-file> tag onward is HIDDEN behind the
@@ -196,14 +221,25 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
         },
         (tok) => {
           if (!started) { started = true; if (onThisChat()) { setThinking(false); setStreaming(true) } raf = requestAnimationFrame(tick) }
-          target += tok
+          raw += tok
+          resolveSwitch()
+          // Hold the opening characters back until we know they aren't a switch
+          // tag, so a partial tag never flashes on screen.
+          target = switchDecided ? raw : ''
         },
       )
-      // Stream finished. Reveal the EXACT final text, then let the typewriter
-      // drain to the end before swapping — no premature cut, no end-of-answer
-      // snap. (Cancelling the animation right here was the visible glitch.)
-      target = full
-      if (!started && full) { started = true; if (onThisChat()) { setThinking(false); setStreaming(true) } raf = requestAnimationFrame(tick) }
+      // Stream finished. Strip the switch tag from the authoritative final text
+      // (defensive: covers a reply too short for the streaming resolver to fire),
+      // flip the mode if we haven't already, then let the typewriter drain to the
+      // end before swapping — no premature cut, no end-of-answer snap.
+      let clean = full
+      if (SWITCH_RE.test(clean)) {
+        clean = clean.replace(SWITCH_RE, '')
+        if (!switchDecided && onThisChat()) setMode('world')
+      }
+      switchDecided = true
+      target = clean
+      if (!started && clean) { started = true; if (onThisChat()) { setThinking(false); setStreaming(true) } raf = requestAnimationFrame(tick) }
       await new Promise<void>((resolve) => {
         const check = () => (shown >= target.length ? resolve() : requestAnimationFrame(check))
         check()
@@ -214,24 +250,24 @@ export function ChatView({ chatId, conn, onQueueChange, onFirstMessage }: Props)
       // message and clear the streaming state together (no await between them),
       // so the answer never flickers or briefly appears twice. Because the
       // typewriter already revealed the full text, the swap is seamless.
-      if (full && replace) {
+      if (clean && replace) {
         // New version of an existing reply. Append to the variant list and make
         // it active; `content` mirrors it so every other reader (export, share,
         // model history) is unaffected.
         const prevVersions = versionsOf(replace).list
-        const variants = [...prevVersions, full]
+        const variants = [...prevVersions, clean]
         const index = variants.length - 1
         // Persist unconditionally (this belongs to `forChat`); paint only if the
         // user is still looking at it.
-        if (onThisChat()) setMessages((prev) => prev.map((x) => (x.id === replace.id ? { ...x, content: full, variants, variant_index: index, reaction: null } : x)))
+        if (onThisChat()) setMessages((prev) => prev.map((x) => (x.id === replace.id ? { ...x, content: clean, variants, variant_index: index, reaction: null } : x)))
         // The old thumbs-up/down judged the PREVIOUS text, so it can't carry to
         // a freshly generated one. (The rating itself is already preserved in
         // the feedback table alongside the answer it was given for.)
         if (replace.reaction) api.reactMessage(replace.id, null).catch(() => {})
         api.saveVariants(replace.id, variants, index).catch(() => {})
         api.touchChat(forChat).catch(() => {})
-      } else if (full) {
-        const saved = await api.addMessage({ chat_id: forChat, role: 'assistant', content: full, mode: m })
+      } else if (clean) {
+        const saved = await api.addMessage({ chat_id: forChat, role: 'assistant', content: clean, mode: m })
         if (onThisChat()) setMessages((prev) => [...prev, saved])
         api.touchChat(forChat).catch(() => {})
       }
