@@ -69,6 +69,10 @@ export default function App() {
   // (StrictMode) and two callers would each POST a new chat, which is how blank
   // "New chat" rows piled up. Callers share the in-flight promise instead.
   const creatingRef = useRef<Promise<string> | null>(null)
+  // Id of the single blank chat, tracked synchronously so back-to-back "New chat"
+  // clicks can't outrun the `chats` state update. Cleared on first message (gate
+  // re-arms) or if that chat is deleted.
+  const emptyChatRef = useRef<string | null>(null)
   const loadAfterAuth = useCallback(async () => {
     const seq = ++bootSeq.current
     const stale = () => seq !== bootSeq.current
@@ -134,31 +138,29 @@ export default function App() {
     return () => data.subscription.unsubscribe()
   }, [loadAfterAuth])
 
-  // Enforce one conversation per chat: never spawn a second empty chat while one
-  // already exists. If the user clicks "New chat" with an untouched chat around,
-  // we just surface that chat (and nudge them) instead of piling up blank rows.
-  async function newChat() {
-    const empty = chats.find((c) => (c.msgCount ?? 0) === 0)
-    if (empty) {
-      setActiveId(empty.id)
-      if (empty.id === activeId) setNewChatHint(true) // already here → they need a reason why nothing changed
-      return
+  // Open the one blank chat, creating it only if none exists. Single funnel for
+  // BOTH the "New chat" button and the lazy gate, because the old split versions
+  // raced: `chats` state lags a click by a render, so hammering "New chat" (e.g.
+  // while a question is sending) had every call read the same stale list, find no
+  // blank chat, and mint another one — the "many new chats" bug.
+  //
+  // Three layers close that window:
+  //   1. creatingRef  — an in-flight creation is shared, never duplicated.
+  //   2. emptyChatRef — the id of the blank chat, set SYNCHRONOUSLY at creation
+  //      so the very next click sees it before React re-renders.
+  //   3. chats state  — the durable source once the render lands.
+  async function openOrCreateEmpty(fromButton: boolean): Promise<string> {
+    if (creatingRef.current) return creatingRef.current // 1
+    const known = chats.find((c) => (c.msgCount ?? 0) === 0)?.id ?? emptyChatRef.current // 2 + 3
+    if (known) {
+      setActiveId(known)
+      // Already sitting on it → say why nothing appeared to happen.
+      if (fromButton && known === activeId) setNewChatHint(true)
+      return known
     }
-    const c = await api.createChat()
-    setChats((prev) => [c, ...prev])
-    setActiveId(c.id)
-  }
-
-  // Lazily reuse/create the active chat. Reuses an existing empty chat so we
-  // don't strand the user on a blank chat while another empty one lingers, and
-  // shares any in-flight creation so two concurrent callers can't each spawn a
-  // blank chat.
-  async function ensureActive(): Promise<string> {
-    if (creatingRef.current) return creatingRef.current
-    const empty = chats.find((c) => (c.msgCount ?? 0) === 0)
-    if (empty) { setActiveId(empty.id); return empty.id }
     const p = (async () => {
       const c = await api.createChat()
+      emptyChatRef.current = c.id
       setChats((prev) => [c, ...prev])
       setActiveId(c.id)
       return c.id
@@ -167,9 +169,14 @@ export default function App() {
     try { return await p } finally { creatingRef.current = null }
   }
 
+  function newChat() { void openOrCreateEmpty(true) }
+  function ensureActive(): Promise<string> { return openOrCreateEmpty(false) }
+
   async function onFirstMessage(chatId: string, title: string) {
+    // First message lands → this chat is no longer blank, so a NEW one is
+    // unlocked. Clearing the ref here is what re-arms the gate.
+    if (emptyChatRef.current === chatId) emptyChatRef.current = null
     await api.renameChat(chatId, title)
-    // First message lands → chat is no longer empty, so "New chat" is unlocked.
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title, msgCount: (c.msgCount ?? 0) + 1 } : c)))
   }
 
@@ -222,7 +229,13 @@ export default function App() {
       onNew={() => { newChat(); closeDrawer() }}
       onRename={(id, t) => { api.renameChat(id, t); setChats((p) => p.map((c) => (c.id === id ? { ...c, title: t } : c))) }}
       onPin={(id, pinned) => { api.pinChat(id, pinned); setChats((p) => p.map((c) => (c.id === id ? { ...c, pinned } : c))) }}
-      onDelete={(id) => { api.deleteChat(id); setChats((p) => p.filter((c) => c.id !== id)); if (activeId === id) setActiveId(null) }}
+      onDelete={(id) => {
+        api.deleteChat(id)
+        // Don't let the gate keep pointing at a chat that no longer exists.
+        if (emptyChatRef.current === id) emptyChatRef.current = null
+        setChats((p) => p.filter((c) => c.id !== id))
+        if (activeId === id) setActiveId(null)
+      }}
       onShare={shareConversation}
       onExport={exportConversation}
       onSettings={() => { setShowSettings(true); closeDrawer() }}
