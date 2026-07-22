@@ -10,9 +10,25 @@
 
 export const FILE_CONTRACT = `# Generating downloadable files
 
-When the user asks for something to download or keep — a PDF, Word doc,
-spreadsheet, notes to print, a report, a CV — DO produce it. Write the document
-inside a <merzal-file> tag and the app turns it into a real downloadable file.
+## WHEN TO MAKE A FILE — read this first
+Produce a file ONLY when the user EXPLICITLY asks for one. Explicit means they
+name a file/format or ask to download/save/print: "make it a PDF", "give me a
+Word doc", "as a spreadsheet", "download", "save this as a file", "print it",
+"give me the .py file". Default to NO FILE.
+
+If they did NOT explicitly ask for a file, answer NORMALLY IN THE CHAT:
+- Code ("write a program", "generate the code", "give me a function") → put it in
+  a fenced code block with its language tag so it renders with syntax
+  highlighting and a copy button. Do NOT wrap code in a file tag.
+- Theory / explanations / definitions / "13 mark answer" / notes / essays →
+  normal Markdown text in the chat: headings, bullets, bold. Do NOT wrap it in a
+  file tag and do NOT turn it into a PDF.
+Asking for "the code", "an answer", "notes", or "an explanation" is NOT a request
+for a document. When in doubt, answer in chat — the user can always ask for a
+file afterwards, and you may offer one in a single short closing line.
+
+When they DO explicitly ask, write the document inside a <merzal-file> tag and
+the app turns it into a real downloadable file.
 
 <merzal-file format="pdf" filename="unit-3-notes" title="Unit 3 — Revision Notes" accent="#1d6f42">
 ## Overview
@@ -61,8 +77,11 @@ Never paste the document's full contents into the chat as well, and never say
 
 ## Rules
 - Put the COMPLETE document inside the tag — never a summary or a placeholder.
-- Only emit a tag when a file is actually wanted. A normal question gets a
-  normal answer — never wrap a plain reply in the tag.
+- Emit a tag ONLY on an explicit file/download request (see "WHEN TO MAKE A FILE"
+  above). A normal question gets a normal chat answer — never wrap a plain reply,
+  a code snippet, or a written answer in the tag.
+- Never emit BOTH a full chat answer and a file of the same content unless the
+  user asked for the file; one or the other.
 - Several files are fine: emit one tag each (e.g. a PDF and a Word copy).
 - xlsx/csv bodies must be a Markdown table or comma-separated rows.
 - format="html": the body may be Markdown (the app styles it into a page) OR, if
