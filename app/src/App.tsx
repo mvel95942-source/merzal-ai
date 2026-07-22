@@ -62,6 +62,13 @@ export default function App() {
   // we call this directly, so two runs used to race (duplicate network, chat
   // flicker). A monotonic token lets only the newest run commit its results.
   const bootSeq = useRef(0)
+  // True once this TAB has completed its first boot. Later boots (auth events on
+  // tab refocus) must not reset which chat is open — see loadAfterAuth.
+  const bootedRef = useRef(false)
+  // De-dupes concurrent chat creation: React can invoke the gate effect twice
+  // (StrictMode) and two callers would each POST a new chat, which is how blank
+  // "New chat" rows piled up. Callers share the in-flight promise instead.
+  const creatingRef = useRef<Promise<string> | null>(null)
   const loadAfterAuth = useCallback(async () => {
     const seq = ++bootSeq.current
     const stale = () => seq !== bootSeq.current
@@ -95,11 +102,18 @@ export default function App() {
         setProfile(prof)
       }
       setChats(list)
-      // Always open into a FRESH chat on app entry (unless a share link asked to
-      // resume a specific one). Leaving activeId null makes ChatViewGate open an
-      // empty new chat — reusing an existing untouched one rather than piling up
-      // blanks (see ensureActive) — so users never land back in the last convo.
-      setActiveId(openId ?? null)
+      // Open a FRESH chat only on the FIRST load of this tab. Supabase re-fires
+      // SIGNED_IN when the tab regains focus (session revalidation), and this
+      // used to run again and yank the user out of the conversation they were in
+      // — and spawn another blank chat each time. Now: switch tabs and come
+      // back, you stay exactly where you were; you only land on a new chat when
+      // the app/tab is closed and opened again. A share link still wins.
+      if (!bootedRef.current) {
+        bootedRef.current = true
+        setActiveId(openId ?? null)
+      } else if (openId) {
+        setActiveId(openId)
+      }
       setPhase('app')
     } catch {
       // Never strand the user on "Loading…": on any unexpected error, fall back
@@ -136,14 +150,21 @@ export default function App() {
   }
 
   // Lazily reuse/create the active chat. Reuses an existing empty chat so we
-  // don't strand the user on a blank chat while another empty one lingers.
-  async function ensureActive() {
+  // don't strand the user on a blank chat while another empty one lingers, and
+  // shares any in-flight creation so two concurrent callers can't each spawn a
+  // blank chat.
+  async function ensureActive(): Promise<string> {
+    if (creatingRef.current) return creatingRef.current
     const empty = chats.find((c) => (c.msgCount ?? 0) === 0)
     if (empty) { setActiveId(empty.id); return empty.id }
-    const c = await api.createChat()
-    setChats((prev) => [c, ...prev])
-    setActiveId(c.id)
-    return c.id
+    const p = (async () => {
+      const c = await api.createChat()
+      setChats((prev) => [c, ...prev])
+      setActiveId(c.id)
+      return c.id
+    })()
+    creatingRef.current = p
+    try { return await p } finally { creatingRef.current = null }
   }
 
   async function onFirstMessage(chatId: string, title: string) {
